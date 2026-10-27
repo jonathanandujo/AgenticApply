@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="AgenticApply.Agent/AgenticApply.Agent.csproj" />
+  <Project Path="AgenticApply.Worker/AgenticApply.Worker.csproj" />
+  <Project Path="AgenticApply.Api/AgenticApply.Api.csproj" />
+</Solution>

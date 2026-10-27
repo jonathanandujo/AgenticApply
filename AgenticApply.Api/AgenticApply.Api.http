@@ -1,0 +1,27 @@
+@AgenticApply.Api_HostAddress = http://localhost:5075
+
+### Get all jobs
+GET {{AgenticApply.Api_HostAddress}}/jobs
+Accept: application/json
+
+### Get the top 10 evaluated jobs
+GET {{AgenticApply.Api_HostAddress}}/jobs/top
+Accept: application/json
+
+### Get a job by ID
+GET {{AgenticApply.Api_HostAddress}}/jobs/4481802072
+Accept: application/json
+
+### Get a missing job (expected 404)
+GET {{AgenticApply.Api_HostAddress}}/jobs/does-not-exist
+Accept: application/json
+
+### Get aggregate statistics
+GET {{AgenticApply.Api_HostAddress}}/stats
+Accept: application/json
+
+### Get the OpenAPI document in Development
+GET {{AgenticApply.Api_HostAddress}}/openapi/v1.json
+Accept: application/json
+
+###
