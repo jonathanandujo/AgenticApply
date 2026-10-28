@@ -1,12 +1,14 @@
-import { Activity, Bot, BriefcaseBusiness, Database, Link2, Save, Sparkles } from 'lucide-react'
+import { Activity, Bot, BriefcaseBusiness, Database, Link2, Save } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { ErrorState, LoadingState } from '../components/QueryState'
 import {
   useLinkedInSearchSettings,
+  useOllamaSettings,
   useStats,
   useUpdateLinkedInSearchUrl,
+  useUpdateOllamaModel,
 } from '../hooks/useJobs'
 
 function formatDate(value?: string | null) {
@@ -23,6 +25,7 @@ function formatDate(value?: string | null) {
 export function SettingsPage() {
   const query = useStats()
   const linkedInQuery = useLinkedInSearchSettings()
+  const ollamaQuery = useOllamaSettings()
 
   return (
     <div className="page-stack">
@@ -48,7 +51,7 @@ export function SettingsPage() {
                   <span>Model used by your local evaluation service.</span>
                 </div>
                 <code className="setting-value">
-                  {import.meta.env.VITE_OLLAMA_MODEL || 'Not exposed by API'}
+                  {ollamaQuery.data?.model ?? 'Loading…'}
                 </code>
               </div>
               <div className="setting-row">
@@ -78,6 +81,21 @@ export function SettingsPage() {
             </div>
           </Panel>
           <Panel
+            title="Ollama model"
+            subtitle="Choose the default model used for job evaluations."
+          >
+            {ollamaQuery.isLoading ? (
+              <LoadingState label="Loading available Ollama models…" />
+            ) : ollamaQuery.isError ? (
+              <ErrorState onRetry={() => void ollamaQuery.refetch()} />
+            ) : ollamaQuery.data ? (
+              <OllamaModelForm
+                initialModel={ollamaQuery.data.model}
+                availableModels={ollamaQuery.data.availableModels}
+              />
+            ) : null}
+          </Panel>
+          <Panel
             title="LinkedIn job search"
             subtitle="Choose the LinkedIn search results the worker scans."
           >
@@ -89,17 +107,89 @@ export function SettingsPage() {
               <LinkedInSearchUrlForm initialUrl={linkedInQuery.data.jobsUrl} />
             ) : null}
           </Panel>
-          <div className="settings-info">
-            <span className="info-spark"><Sparkles size={16} /></span>
-            <p>
-              The current API doesn’t expose worker execution time or the Ollama
-              model name. Set <code>VITE_OLLAMA_MODEL</code> to show the model
-              configured for your environment.
-            </p>
-          </div>
         </>
       )}
     </div>
+  )
+}
+
+function OllamaModelForm({
+  initialModel,
+  availableModels,
+}: {
+  initialModel: string
+  availableModels: string[]
+}) {
+  const updateModel = useUpdateOllamaModel()
+  const [model, setModel] = useState(initialModel)
+  const savedModel = updateModel.data?.model ?? initialModel
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    updateModel.mutate(model)
+  }
+
+  return (
+    <form className="linkedin-settings-form" onSubmit={handleSubmit}>
+      <label htmlFor="ollama-model">Default model</label>
+      {availableModels.length > 0 ? (
+        <select
+          id="ollama-model"
+          required
+          value={model}
+          onChange={(event) => setModel(event.target.value)}
+        >
+          {!availableModels.includes(model) && (
+            <option value={model}>{model} (configured, unavailable)</option>
+          )}
+          {availableModels.map((availableModel) => (
+            <option key={availableModel} value={availableModel}>
+              {availableModel}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <p className="linkedin-settings-error" role="alert">
+          Ollama did not report any installed models.
+        </p>
+      )}
+      <div className="linkedin-settings-actions">
+        <p>
+          Saved as the default for the worker and future evaluations. You can
+          still choose a different model when re-evaluating an individual job.
+        </p>
+        <button
+          className="button button-primary"
+          type="submit"
+          disabled={
+            updateModel.isPending
+            || !availableModels.includes(model)
+            || model === savedModel
+          }
+        >
+          {updateModel.isPending ? (
+            'Saving…'
+          ) : (
+            <>
+              <Save size={14} />
+              Save model
+            </>
+          )}
+        </button>
+      </div>
+      {updateModel.isError && (
+        <p className="linkedin-settings-error" role="alert">
+          Could not save the model. Confirm it is still installed in Ollama and
+          that the API can reach Ollama.
+        </p>
+      )}
+      {updateModel.isSuccess && (
+        <p className="linkedin-settings-success" role="status">
+          <Link2 size={13} />
+          {updateModel.data.model} saved as the default model.
+        </p>
+      )}
+    </form>
   )
 }
 

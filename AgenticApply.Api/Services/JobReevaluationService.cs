@@ -6,6 +6,7 @@ namespace AgenticApply.Api.Services;
 
 public sealed class JobReevaluationService(
     JobRepository jobRepository,
+    AgentSettingsRepository agentSettingsRepository,
     EvaluationRepository evaluationRepository,
     OllamaService ollamaService,
     IJobQueryService jobQueryService) : IJobReevaluationService
@@ -21,9 +22,13 @@ public sealed class JobReevaluationService(
             return null;
         }
 
+        var selectedModel = string.IsNullOrWhiteSpace(model)
+            ? await agentSettingsRepository.GetOllamaModelAsync(cancellationToken)
+            : model;
+
         var evaluation = await ollamaService.EvaluateJobAsync(
             job,
-            model,
+            selectedModel,
             cancellationToken);
 
         if (evaluation is null)

@@ -36,3 +36,8 @@ export interface Stats {
 export interface LinkedInSearchSettings {
   jobsUrl: string
 }
+
+export interface OllamaSettings {
+  model: string
+  availableModels: string[]
+}

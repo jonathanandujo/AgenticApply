@@ -25,6 +25,9 @@ public sealed class AgentPipelineService(
         var jobsUrl = await agentSettingsRepository.GetLinkedInJobsUrlAsync(
             cancellationToken)
             ?? linkedInSettings.Value.JobsUrl;
+        var ollamaModel = await agentSettingsRepository.GetOllamaModelAsync(
+            cancellationToken)
+            ?? ollamaService.ConfiguredModel;
 
         var scannedJobs = await browserService.GetJobsAsync(
             persistJobs: !_options.DryRun,
@@ -62,6 +65,7 @@ public sealed class AgentPipelineService(
 
             var evaluation = await ollamaService.EvaluateJobAsync(
                 job,
+                ollamaModel,
                 cancellationToken: cancellationToken);
             if (evaluation is null)
             {

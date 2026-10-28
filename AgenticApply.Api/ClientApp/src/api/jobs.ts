@@ -1,4 +1,9 @@
-import type { Job, LinkedInSearchSettings, Stats } from '../types/api'
+import type {
+  Job,
+  LinkedInSearchSettings,
+  OllamaSettings,
+  Stats,
+} from '../types/api'
 import { apiClient } from './client'
 
 export async function getJobs(signal?: AbortSignal): Promise<Job[]> {
@@ -52,6 +57,26 @@ export async function updateLinkedInSearchUrl(
   const { data } = await apiClient.put<LinkedInSearchSettings>(
     '/settings/linkedin-search',
     { jobsUrl },
+  )
+  return data
+}
+
+export async function getOllamaSettings(
+  signal?: AbortSignal,
+): Promise<OllamaSettings> {
+  const { data } = await apiClient.get<OllamaSettings>(
+    '/settings/ollama',
+    { signal },
+  )
+  return data
+}
+
+export async function updateOllamaModel(
+  model: string,
+): Promise<OllamaSettings> {
+  const { data } = await apiClient.put<OllamaSettings>(
+    '/settings/ollama',
+    { model },
   )
   return data
 }

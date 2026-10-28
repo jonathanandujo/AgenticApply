@@ -24,6 +24,8 @@ public class OllamaService
         _candidateProfileService = candidateProfileService;
     }
 
+    public string ConfiguredModel => _settings.Model;
+
     public async Task<JobEvaluation?> EvaluateJobAsync(
         Job job,
         string? model = null,
@@ -150,4 +152,24 @@ Rules:
             return null;
         }
     }
+
+    public async Task<IReadOnlyList<string>> GetAvailableModelsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.GetFromJsonAsync<OllamaTagsResponse>(
+            $"{_settings.BaseUrl.TrimEnd('/')}/api/tags",
+            cancellationToken);
+
+        return response?.Models
+            .Select(model => model.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray()
+            ?? [];
+    }
+
+    private sealed record OllamaTagsResponse(List<OllamaModel> Models);
+
+    private sealed record OllamaModel(string Name);
 }

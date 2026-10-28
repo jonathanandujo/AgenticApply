@@ -3,11 +3,13 @@ import {
   getJob,
   getJobs,
   getLinkedInSearchSettings,
+  getOllamaSettings,
   getStats,
   getTopJobs,
   requestAgentScan,
   reevaluateJob,
   updateLinkedInSearchUrl,
+  updateOllamaModel,
 } from '../api/jobs'
 
 export function useJobs() {
@@ -54,6 +56,26 @@ export function useUpdateLinkedInSearchUrl() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ['settings', 'linkedin-search'],
+      })
+    },
+  })
+}
+
+export function useOllamaSettings() {
+  return useQuery({
+    queryKey: ['settings', 'ollama'],
+    queryFn: ({ signal }) => getOllamaSettings(signal),
+  })
+}
+
+export function useUpdateOllamaModel() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: updateOllamaModel,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['settings', 'ollama'],
       })
     },
   })

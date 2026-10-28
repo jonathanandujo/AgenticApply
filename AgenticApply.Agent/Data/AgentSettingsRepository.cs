@@ -5,6 +5,7 @@ namespace AgenticApply.Agent.Data;
 public sealed class AgentSettingsRepository(string connectionString)
 {
     private const string LinkedInJobsUrlKey = "LinkedInJobsUrl";
+    private const string OllamaModelKey = "OllamaModel";
 
     public async Task<string?> GetLinkedInJobsUrlAsync(
         CancellationToken cancellationToken = default)
@@ -43,6 +44,48 @@ public sealed class AgentSettingsRepository(string connectionString)
             """;
         command.Parameters.AddWithValue("$key", LinkedInJobsUrlKey);
         command.Parameters.AddWithValue("$value", jobsUrl);
+        command.Parameters.AddWithValue("$updatedAt", DateTimeOffset.UtcNow.ToString("O"));
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<string?> GetOllamaModelAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT SettingValue
+            FROM AgentSettings
+            WHERE SettingKey = $key
+            """;
+        command.Parameters.AddWithValue("$key", OllamaModelKey);
+
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return value is string model ? model : null;
+    }
+
+    public async Task SetOllamaModelAsync(
+        string model,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            INSERT INTO AgentSettings (SettingKey, SettingValue, UpdatedAt)
+            VALUES ($key, $value, $updatedAt)
+            ON CONFLICT(SettingKey) DO UPDATE SET
+                SettingValue = excluded.SettingValue,
+                UpdatedAt = excluded.UpdatedAt
+            """;
+        command.Parameters.AddWithValue("$key", OllamaModelKey);
+        command.Parameters.AddWithValue("$value", model);
         command.Parameters.AddWithValue("$updatedAt", DateTimeOffset.UtcNow.ToString("O"));
 
         await command.ExecuteNonQueryAsync(cancellationToken);

@@ -68,6 +68,7 @@ builder.Services.AddSingleton(
 builder.Services.AddScoped<IJobQueryService, JobQueryService>();
 builder.Services.AddScoped<IJobReevaluationService, JobReevaluationService>();
 builder.Services.AddScoped<ILinkedInSettingsService, LinkedInSettingsService>();
+builder.Services.AddScoped<IOllamaSettingsService, OllamaSettingsService>();
 builder.Services.Configure<LinkedInSettings>(
     builder.Configuration.GetSection("LinkedIn"));
 builder.Services.Configure<OllamaSettings>(
@@ -119,6 +120,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapJobEndpoints();
 app.MapLinkedInSettingsEndpoints();
+app.MapOllamaSettingsEndpoints();
 app.MapAgentEndpoints();
 app.MapStatsEndpoint();
 app.MapFallbackToFile("index.html");
