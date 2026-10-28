@@ -1,4 +1,4 @@
-namespace AgenticApply.Worker;
+namespace AgenticApply.Api.Worker;
 
 public interface IAgentPipelineService
 {

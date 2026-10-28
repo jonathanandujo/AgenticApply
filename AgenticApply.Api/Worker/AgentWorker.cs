@@ -1,7 +1,7 @@
 using AgenticApply.Agent.Data;
 using Microsoft.Extensions.Options;
 
-namespace AgenticApply.Worker;
+namespace AgenticApply.Api.Worker;
 
 public sealed class AgentWorker(
     DatabaseInitializer databaseInitializer,
@@ -29,7 +29,6 @@ public sealed class AgentWorker(
         {
             try
             {
-                // Initialize storage before each attempt so a transient database failure can recover.
                 await databaseInitializer.InitializeAsync();
                 await pipelineService.RunOnceAsync(stoppingToken);
             }

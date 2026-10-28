@@ -2,13 +2,23 @@ using AgenticApply.Agent.Data;
 using AgenticApply.Agent.Services;
 using AgenticApply.Api.Endpoints;
 using AgenticApply.Api.Services;
+using AgenticApply.Api.Worker;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
+Directory.SetCurrentDirectory(builder.Environment.ContentRootPath);
 
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
+
+builder.Services
+    .AddOptions<AgentOptions>()
+    .Bind(builder.Configuration.GetSection(AgentOptions.SectionName))
+    .Validate(
+        options => options.ScanIntervalMinutes > 0,
+        "Agent:ScanIntervalMinutes must be greater than zero.")
+    .ValidateOnStart();
 
 var allowedOrigins =
     builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
@@ -81,6 +91,10 @@ builder.Services.AddHttpClient<OllamaService>((serviceProvider, httpClient) =>
     }
 });
 
+builder.Services.AddSingleton<BrowserService>();
+builder.Services.AddSingleton<IAgentPipelineService, AgentPipelineService>();
+builder.Services.AddHostedService<AgentWorker>();
+
 var app = builder.Build();
 
 await app.Services
@@ -90,6 +104,8 @@ await app.Services
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseCors("Frontend");
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 if (app.Environment.IsDevelopment())
 {
@@ -99,5 +115,6 @@ if (app.Environment.IsDevelopment())
 app.MapJobEndpoints();
 app.MapLinkedInSettingsEndpoints();
 app.MapStatsEndpoint();
+app.MapFallbackToFile("index.html");
 
 app.Run();

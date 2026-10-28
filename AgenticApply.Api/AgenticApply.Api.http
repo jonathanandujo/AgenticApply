@@ -1,4 +1,4 @@
-@AgenticApply.Api_HostAddress = http://localhost:5075
+@AgenticApply.Api_HostAddress = http://localhost:5000
 
 ### Get all jobs
 GET {{AgenticApply.Api_HostAddress}}/jobs

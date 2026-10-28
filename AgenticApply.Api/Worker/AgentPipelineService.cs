@@ -2,7 +2,7 @@ using AgenticApply.Agent.Data;
 using AgenticApply.Agent.Services;
 using Microsoft.Extensions.Options;
 
-namespace AgenticApply.Worker;
+namespace AgenticApply.Api.Worker;
 
 public sealed class AgentPipelineService(
     BrowserService browserService,
@@ -26,15 +26,12 @@ public sealed class AgentPipelineService(
             cancellationToken)
             ?? linkedInSettings.Value.JobsUrl;
 
-        // Scraping persists new jobs in live mode; dry-run returns them without database writes.
         var scannedJobs = await browserService.GetJobsAsync(
             persistJobs: !_options.DryRun,
             cancellationToken: cancellationToken,
             jobsUrl: jobsUrl);
 
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var jobsToEvaluate = await jobRepository.GetAllAsync();
+        var jobsToEvaluate = await jobRepository.GetAllAsync(cancellationToken);
         if (_options.DryRun)
         {
             jobsToEvaluate.AddRange(scannedJobs);
@@ -52,7 +49,9 @@ public sealed class AgentPipelineService(
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (await evaluationRepository.ExistsAsync(job.JobId))
+            if (await evaluationRepository.ExistsAsync(
+                job.JobId,
+                cancellationToken))
             {
                 logger.LogDebug(
                     "Skipping job {JobId}; an evaluation already exists",
@@ -60,7 +59,9 @@ public sealed class AgentPipelineService(
                 continue;
             }
 
-            var evaluation = await ollamaService.EvaluateJobAsync(job);
+            var evaluation = await ollamaService.EvaluateJobAsync(
+                job,
+                cancellationToken: cancellationToken);
             if (evaluation is null)
             {
                 logger.LogWarning(
@@ -71,7 +72,10 @@ public sealed class AgentPipelineService(
 
             if (!_options.DryRun)
             {
-                await evaluationRepository.InsertAsync(job.JobId, evaluation);
+                await evaluationRepository.InsertAsync(
+                    job.JobId,
+                    evaluation,
+                    cancellationToken);
             }
 
             logger.LogInformation(
