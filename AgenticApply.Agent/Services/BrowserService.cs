@@ -86,9 +86,18 @@ public class BrowserService
     public async Task<List<Job>> GetJobsAsync(
         bool persistJobs = true,
         CancellationToken cancellationToken = default,
-        string? jobsUrl = null)
+        string? jobsUrl = null,
+        int maxNewJobs = 3)
     {
+        if (maxNewJobs is < 2 or > 5)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maxNewJobs),
+                "The per-scan new job limit must be between 2 and 5.");
+        }
+
         var jobs = new List<Job>();
+        var newJobsProcessed = 0;
         var searchUrl = ValidateJobsUrl(
             string.IsNullOrWhiteSpace(jobsUrl)
                 ? _linkedInSettings.JobsUrl
@@ -140,9 +149,18 @@ public class BrowserService
 
             try
             {
-                if (await _jobRepository.ExistsAsync(
+                var existingJob = await _jobRepository.GetAsync(
                     listing.JobId,
-                    cancellationToken))
+                    cancellationToken);
+
+                if (existingJob is null && newJobsProcessed >= maxNewJobs)
+                {
+                    break;
+                }
+
+                if (existingJob is not null
+                    && !string.IsNullOrWhiteSpace(existingJob.Description)
+                    && !string.IsNullOrWhiteSpace(existingJob.Url))
                 {
                     continue;
                 }
@@ -157,45 +175,10 @@ public class BrowserService
                     page,
                     cancellationToken,
                     listing.Url);
-                await page.WaitForTimeoutAsync(1500);
-
-                var easyApply =
-                    await page
-                        .Locator("#jobs-apply-button-id")
-                        .CountAsync() > 0;
-
-                string description = string.Empty;
-
-                var descriptionSelectors = new[]
-                {
-                ".jobs-description-content__text",
-                ".jobs-box__html-content",
-                "#job-details",
-                ".jobs-description"
-            };
-
-                foreach (var selector in descriptionSelectors)
-                {
-                    try
-                    {
-                        var locator = page.Locator(selector);
-
-                        if (await locator.CountAsync() > 0)
-                        {
-                            description =
-                                await locator.First.InnerTextAsync();
-
-                            if (!string.IsNullOrWhiteSpace(description))
-                            {
-                                break;
-                            }
-                        }
-                    }
-                    catch
-                    {
-                        // ignorar selector inválido
-                    }
-                }
+                var easyApply = await DetectEasyApplyAsync(page);
+                var description = await ReadJobDescriptionAsync(
+                    page,
+                    cancellationToken);
 
                 var job = new Job
                 {
@@ -210,12 +193,43 @@ public class BrowserService
 
                 if (persistJobs)
                 {
-                    await _jobRepository.InsertAsync(
-                        job,
-                        cancellationToken);
+                    if (existingJob is null)
+                    {
+                        await _jobRepository.InsertAsync(job, cancellationToken);
+                    }
+                    else
+                    {
+                        await _jobRepository.UpdateMissingScrapedDetailsAsync(
+                            job,
+                            cancellationToken);
+                    }
                 }
 
                 jobs.Add(job);
+                if (existingJob is null)
+                {
+                    newJobsProcessed++;
+                    _logger.LogInformation(
+                        "Scraped new LinkedIn job {JobId}; new jobs this scan: {NewJobCount}/{NewJobLimit}",
+                        job.JobId,
+                        newJobsProcessed,
+                        maxNewJobs);
+                }
+
+                if (string.IsNullOrWhiteSpace(description))
+                {
+                    _logger.LogWarning(
+                        "LinkedIn job {JobId} was saved without a description; LinkedIn may not have loaded its detail content",
+                        job.JobId);
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "Saved LinkedIn job {JobId}; description length: {DescriptionLength}; Easy Apply: {EasyApply}",
+                        job.JobId,
+                        job.Description.Length,
+                        job.EasyApply);
+                }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -237,6 +251,88 @@ public class BrowserService
         }
 
         return jobs;
+    }
+
+    private async Task<string> ReadJobDescriptionAsync(
+        IPage page,
+        CancellationToken cancellationToken)
+    {
+        var selectors = new[]
+        {
+            ".jobs-description__content",
+            ".jobs-description-content__text",
+            ".jobs-box__html-content",
+            "#job-details",
+            ".jobs-description",
+            "[class*='jobs-description']"
+        };
+
+        for (var attempt = 0; attempt < 12; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            foreach (var selector in selectors)
+            {
+                try
+                {
+                    var locator = page.Locator(selector).First;
+                    if (await locator.CountAsync() == 0
+                        || !await locator.IsVisibleAsync())
+                    {
+                        continue;
+                    }
+
+                    var text = (await locator.InnerTextAsync()).Trim();
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        return text;
+                    }
+                }
+                catch (PlaywrightException exception)
+                {
+                    _logger.LogDebug(
+                        exception,
+                        "Could not read LinkedIn description using selector {Selector}",
+                        selector);
+                }
+            }
+
+            await page.WaitForTimeoutAsync(500);
+        }
+
+        return string.Empty;
+    }
+
+    private async Task<bool> DetectEasyApplyAsync(IPage page)
+    {
+        var selectors = new[]
+        {
+            "#jobs-apply-button-id",
+            "button.jobs-apply-button",
+            "button[aria-label*='Easy Apply']",
+            "button:has-text('Easy Apply')"
+        };
+
+        foreach (var selector in selectors)
+        {
+            try
+            {
+                var locator = page.Locator(selector).First;
+                if (await locator.CountAsync() > 0 && await locator.IsVisibleAsync())
+                {
+                    return true;
+                }
+            }
+            catch (PlaywrightException exception)
+            {
+                _logger.LogDebug(
+                    exception,
+                    "Could not check LinkedIn Easy Apply using selector {Selector}",
+                    selector);
+            }
+        }
+
+        return false;
     }
 
     private async Task WaitForAuthenticationIfRequiredAsync(

@@ -1,5 +1,6 @@
 using AgenticApply.Agent.Data;
 using Microsoft.Extensions.Options;
+using System.Threading.Channels;
 
 namespace AgenticApply.Api.Worker;
 
@@ -10,6 +11,17 @@ public sealed class AgentWorker(
     ILogger<AgentWorker> logger) : BackgroundService
 {
     private readonly AgentOptions _options = options.Value;
+    private readonly Channel<bool> _scanRequests =
+        Channel.CreateBounded<bool>(
+            new BoundedChannelOptions(1)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = false
+            });
+
+    public bool TryQueueScan() =>
+        _options.Enabled && _scanRequests.Writer.TryWrite(true);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -46,7 +58,7 @@ public sealed class AgentWorker(
 
             try
             {
-                await Task.Delay(interval, stoppingToken);
+                await WaitForNextScanAsync(interval, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -55,5 +67,39 @@ public sealed class AgentWorker(
         }
 
         logger.LogInformation("Agent worker is stopping");
+    }
+
+    private async Task WaitForNextScanAsync(
+        TimeSpan interval,
+        CancellationToken stoppingToken)
+    {
+        using var readCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            stoppingToken);
+        var delay = Task.Delay(interval, stoppingToken);
+        var scanRequest = _scanRequests.Reader
+            .ReadAsync(readCancellation.Token)
+            .AsTask();
+
+        var completedTask = await Task.WhenAny(delay, scanRequest);
+        if (scanRequest.IsCompleted || completedTask == scanRequest)
+        {
+            await scanRequest;
+            while (_scanRequests.Reader.TryRead(out _))
+            {
+            }
+
+            return;
+        }
+
+        readCancellation.Cancel();
+        try
+        {
+            await scanRequest;
+        }
+        catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+        {
+        }
+
+        await delay;
     }
 }

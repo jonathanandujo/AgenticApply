@@ -8,5 +8,7 @@ public sealed class AgentOptions
 
     public int ScanIntervalMinutes { get; set; } = 120;
 
+    public int MaxNewJobsPerScan { get; set; } = 3;
+
     public bool DryRun { get; set; }
 }

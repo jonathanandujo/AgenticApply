@@ -55,3 +55,8 @@ export async function updateLinkedInSearchUrl(
   )
   return data
 }
+
+export async function requestAgentScan(): Promise<{ message: string }> {
+  const { data } = await apiClient.post<{ message: string }>('/agent/scan')
+  return data
+}

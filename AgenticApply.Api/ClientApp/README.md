@@ -23,6 +23,9 @@ The API's `Agent:Enabled` setting controls the hosted worker, and
 configuration enables persistent writes. The existing SQLite database remains
 at `AgenticApply.Agent/Data/AgenticApply.db`; configure
 `ConnectionStrings:AgenticApply` if your database is elsewhere.
+Set `Agent:MaxNewJobsPerScan` from 2 to 5 to limit new records per scan
+(default: 3). Use **Scan now** on the dashboard or `POST /agent/scan` to queue a
+scan immediately instead of waiting for the interval.
 
 For frontend-only development, run the API with the `Agent:Enabled` setting
 disabled if you do not want the agent to scan while working on the UI, then run:

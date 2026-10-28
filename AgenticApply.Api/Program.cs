@@ -18,6 +18,9 @@ builder.Services
     .Validate(
         options => options.ScanIntervalMinutes > 0,
         "Agent:ScanIntervalMinutes must be greater than zero.")
+    .Validate(
+        options => options.MaxNewJobsPerScan is >= 2 and <= 5,
+        "Agent:MaxNewJobsPerScan must be between 2 and 5.")
     .ValidateOnStart();
 
 var allowedOrigins =
@@ -93,7 +96,9 @@ builder.Services.AddHttpClient<OllamaService>((serviceProvider, httpClient) =>
 
 builder.Services.AddSingleton<BrowserService>();
 builder.Services.AddSingleton<IAgentPipelineService, AgentPipelineService>();
-builder.Services.AddHostedService<AgentWorker>();
+builder.Services.AddSingleton<AgentWorker>();
+builder.Services.AddHostedService(
+    serviceProvider => serviceProvider.GetRequiredService<AgentWorker>());
 
 var app = builder.Build();
 
@@ -114,6 +119,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapJobEndpoints();
 app.MapLinkedInSettingsEndpoints();
+app.MapAgentEndpoints();
 app.MapStatsEndpoint();
 app.MapFallbackToFile("index.html");
 

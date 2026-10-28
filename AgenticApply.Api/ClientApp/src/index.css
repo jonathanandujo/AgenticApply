@@ -338,6 +338,7 @@ code.setting-value { padding: 5px 7px; border: 1px solid #302c3f; border-radius:
 .linkedin-settings-error, .linkedin-settings-success { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 9px; }
 .linkedin-settings-error { color: #eea0a0; }
 .linkedin-settings-success { color: #8edab1; }
+.dashboard-actions { display: flex; align-items: center; gap: 8px; }
 
 @media (min-width: 1500px) {
   .content-area { padding-right: 48px; padding-left: 48px; }

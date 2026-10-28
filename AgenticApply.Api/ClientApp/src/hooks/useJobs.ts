@@ -5,6 +5,7 @@ import {
   getLinkedInSearchSettings,
   getStats,
   getTopJobs,
+  requestAgentScan,
   reevaluateJob,
   updateLinkedInSearchUrl,
 } from '../api/jobs'
@@ -55,6 +56,12 @@ export function useUpdateLinkedInSearchUrl() {
         queryKey: ['settings', 'linkedin-search'],
       })
     },
+  })
+}
+
+export function useRequestAgentScan() {
+  return useMutation({
+    mutationFn: requestAgentScan,
   })
 }
 

@@ -29,7 +29,8 @@ public sealed class AgentPipelineService(
         var scannedJobs = await browserService.GetJobsAsync(
             persistJobs: !_options.DryRun,
             cancellationToken: cancellationToken,
-            jobsUrl: jobsUrl);
+            jobsUrl: jobsUrl,
+            maxNewJobs: _options.MaxNewJobsPerScan);
 
         var jobsToEvaluate = await jobRepository.GetAllAsync(cancellationToken);
         if (_options.DryRun)

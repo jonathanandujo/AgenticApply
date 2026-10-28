@@ -3,6 +3,8 @@ import {
   BriefcaseBusiness,
   CheckCheck,
   CircleCheck,
+  LoaderCircle,
+  Play,
   RefreshCw,
   Sparkles,
 } from 'lucide-react'
@@ -13,7 +15,12 @@ import { KpiCard } from '../components/KpiCard'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { ErrorState, LoadingState } from '../components/QueryState'
-import { useJobs, useStats, useTopJobs } from '../hooks/useJobs'
+import {
+  useJobs,
+  useRequestAgentScan,
+  useStats,
+  useTopJobs,
+} from '../hooks/useJobs'
 
 function getTodayLabel() {
   return new Intl.DateTimeFormat(undefined, {
@@ -27,6 +34,7 @@ export function DashboardPage() {
   const statsQuery = useStats()
   const jobsQuery = useJobs()
   const topJobsQuery = useTopJobs()
+  const scanMutation = useRequestAgentScan()
 
   if (statsQuery.isLoading || jobsQuery.isLoading || topJobsQuery.isLoading) {
     return <LoadingState label="Preparing your job-search dashboard…" />
@@ -57,18 +65,43 @@ export function DashboardPage() {
         title="Your next move starts here."
         description="A clear view of your search, your matches, and what’s worth your attention."
         action={
-          <button
-            className="button button-secondary"
-            onClick={() => {
-              void statsQuery.refetch()
-              void jobsQuery.refetch()
-              void topJobsQuery.refetch()
-            }}
-          >
-            <RefreshCw size={15} /> Refresh data
-          </button>
+          <div className="dashboard-actions">
+            <button
+              className="button button-primary"
+              onClick={() => scanMutation.mutate()}
+              disabled={scanMutation.isPending}
+            >
+              {scanMutation.isPending ? (
+                <LoaderCircle className="spin" size={15} />
+              ) : (
+                <Play size={15} />
+              )}
+              {scanMutation.isPending ? 'Queuing…' : 'Scan now'}
+            </button>
+            <button
+              className="button button-secondary"
+              onClick={() => {
+                void statsQuery.refetch()
+                void jobsQuery.refetch()
+                void topJobsQuery.refetch()
+              }}
+            >
+              <RefreshCw size={15} /> Refresh data
+            </button>
+          </div>
         }
       />
+      {scanMutation.isSuccess && (
+        <div className="linkedin-settings-success" role="status">
+          {scanMutation.data.message} Refresh the dashboard after it completes.
+        </div>
+      )}
+      {scanMutation.isError && (
+        <div className="linkedin-settings-error" role="alert">
+          Could not queue a scan. The agent may be disabled or a scan may
+          already be queued.
+        </div>
+      )}
 
       <section className="kpi-grid" aria-label="Job search key metrics">
         <KpiCard

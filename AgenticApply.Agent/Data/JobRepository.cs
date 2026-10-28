@@ -100,6 +100,44 @@ public class JobRepository
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task UpdateMissingScrapedDetailsAsync(
+        Job job,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection =
+            new SqliteConnection(_connectionString);
+
+        await connection.OpenAsync(cancellationToken);
+
+        var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            UPDATE Jobs
+            SET
+                Title = CASE WHEN Title = '' THEN $title ELSE Title END,
+                Company = CASE WHEN Company = '' THEN $company ELSE Company END,
+                Location = CASE WHEN Location = '' THEN $location ELSE Location END,
+                Description = CASE
+                    WHEN Description = '' THEN $description
+                    ELSE Description
+                END,
+                EasyApply = $easyApply,
+                Url = CASE WHEN Url IS NULL OR Url = '' THEN $url ELSE Url END
+            WHERE JobId = $jobId
+              AND (Description = '' OR Url IS NULL OR Url = '')
+            """;
+
+        command.Parameters.AddWithValue("$jobId", job.JobId);
+        command.Parameters.AddWithValue("$title", job.Title);
+        command.Parameters.AddWithValue("$company", job.Company);
+        command.Parameters.AddWithValue("$location", job.Location);
+        command.Parameters.AddWithValue("$description", job.Description);
+        command.Parameters.AddWithValue("$easyApply", job.EasyApply ? 1 : 0);
+        command.Parameters.AddWithValue("$url", job.Url);
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async Task<List<Job>> GetAllAsync(
         CancellationToken cancellationToken = default)
     {
