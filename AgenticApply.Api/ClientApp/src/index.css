@@ -292,7 +292,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .model-input-label span { color: #727988; font-size: 8px; font-weight: 400; }
 .reevaluate-controls { display: flex; gap: 6px; }
 .model-input { width: 0; min-width: 0; flex: 1; padding: 0 8px; border: 1px solid #2d313c; border-radius: 7px; color: #d7d4e2; background: #12151c; font-size: 9px; }
-.model-input::placeholder { color: #6f7583; }
 .reevaluate-button { min-height: 31px; padding: 0 8px; white-space: nowrap; font-size: 9px; }
 .reevaluate-feedback { margin: 9px 12px 0; padding: 8px; border: 1px solid; border-radius: 6px; font-size: 9px; line-height: 1.45; }
 .reevaluate-error { border-color: #543337; color: #eea0a0; background: #281a1d; }

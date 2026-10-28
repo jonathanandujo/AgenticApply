@@ -11,12 +11,13 @@ import { Panel } from '../components/Panel'
 import { ErrorState, LoadingState } from '../components/QueryState'
 import { ScoreBadge } from '../components/ScoreBadge'
 import { StatusBadge } from '../components/StatusBadge'
-import { useJob, useReevaluateJob } from '../hooks/useJobs'
+import { useJob, useOllamaSettings, useReevaluateJob } from '../hooks/useJobs'
 import { useState } from 'react'
 
 export function JobDetailsPage() {
   const { jobId = '' } = useParams()
   const query = useJob(jobId)
+  const ollamaQuery = useOllamaSettings()
   const reevaluateMutation = useReevaluateJob(jobId)
   const [model, setModel] = useState('')
 
@@ -86,15 +87,28 @@ export function JobDetailsPage() {
                 Model override <span>optional</span>
               </label>
               <div className="reevaluate-controls">
-                <input
+                <select
                   id="reevaluate-model"
                   className="model-input"
                   value={model}
                   onChange={(event) => setModel(event.target.value)}
-                  maxLength={100}
-                  placeholder="Use configured model"
-                  disabled={reevaluateMutation.isPending}
-                />
+                  disabled={
+                    reevaluateMutation.isPending
+                    || ollamaQuery.isLoading
+                    || ollamaQuery.isError
+                  }
+                >
+                  <option value="">
+                    {ollamaQuery.data
+                      ? `Use default (${ollamaQuery.data.model})`
+                      : 'Use saved default model'}
+                  </option>
+                  {ollamaQuery.data?.availableModels.map((availableModel) => (
+                    <option key={availableModel} value={availableModel}>
+                      {availableModel}
+                    </option>
+                  ))}
+                </select>
                 <button
                   className="button button-secondary reevaluate-button"
                   type="submit"
@@ -108,8 +122,9 @@ export function JobDetailsPage() {
                 </button>
               </div>
               <p className="model-input-hint">
-                Enter a model name such as <code>llama3.1:8b</code>, or leave
-                blank to use the API’s configured model.
+                {ollamaQuery.isError
+                  ? 'Could not load available models. Re-evaluation will use the saved default.'
+                  : 'Choose an installed model, or use the saved default.'}
               </p>
             </form>
             {reevaluateMutation.isError && (
