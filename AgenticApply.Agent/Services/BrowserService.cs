@@ -140,8 +140,9 @@ public class BrowserService
             searchUrl);
 
         _logger.LogInformation(
-            "LinkedIn job search found {JobCount} job listings",
-            listings.Count);
+            "LinkedIn job search found {JobCount} job listings; {ViewedJobCount} are marked Viewed",
+            listings.Count,
+            listings.Count(listing => listing.IsViewed));
 
         foreach (var listing in listings)
         {
@@ -165,16 +166,15 @@ public class BrowserService
                     continue;
                 }
 
-                await page.GotoAsync(
-                    listing.Url,
-                    new PageGotoOptions
-                    {
-                        WaitUntil = WaitUntilState.DOMContentLoaded
-                    });
+                await SelectJobListingAsync(
+                    page,
+                    listing,
+                    cancellationToken,
+                    searchUrl);
                 await WaitForAuthenticationIfRequiredAsync(
                     page,
                     cancellationToken,
-                    listing.Url);
+                    searchUrl);
                 var easyApply = await DetectEasyApplyAsync(page);
                 var description = await ReadJobDescriptionAsync(
                     page,
@@ -210,8 +210,9 @@ public class BrowserService
                 {
                     newJobsProcessed++;
                     _logger.LogInformation(
-                        "Scraped new LinkedIn job {JobId}; new jobs this scan: {NewJobCount}/{NewJobLimit}",
+                        "Scraped new LinkedIn job {JobId}; LinkedIn Viewed badge: {LinkedInViewed}; new jobs this scan: {NewJobCount}/{NewJobLimit}",
                         job.JobId,
+                        listing.IsViewed,
                         newJobsProcessed,
                         maxNewJobs);
                 }
@@ -225,10 +226,11 @@ public class BrowserService
                 else
                 {
                     _logger.LogInformation(
-                        "Saved LinkedIn job {JobId}; description length: {DescriptionLength}; Easy Apply: {EasyApply}",
+                        "Saved LinkedIn job {JobId}; description length: {DescriptionLength}; Easy Apply: {EasyApply}; LinkedIn Viewed badge: {LinkedInViewed}",
                         job.JobId,
                         job.Description.Length,
-                        job.EasyApply);
+                        job.EasyApply,
+                        listing.IsViewed);
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -246,11 +248,48 @@ public class BrowserService
                 await WaitForAuthenticationIfRequiredAsync(
                     page,
                     cancellationToken,
-                    listing.Url);
+                    searchUrl);
             }
         }
 
         return jobs;
+    }
+
+    private async Task SelectJobListingAsync(
+        IPage page,
+        JobListing listing,
+        CancellationToken cancellationToken,
+        string searchUrl)
+    {
+        await WaitForAuthenticationIfRequiredAsync(
+            page,
+            cancellationToken,
+            searchUrl);
+
+        var cards = page.Locator("div[data-job-id]");
+        var cardCount = await cards.CountAsync();
+
+        for (var index = 0; index < cardCount; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var card = cards.Nth(index);
+            if (!string.Equals(
+                    await card.GetAttributeAsync("data-job-id"),
+                    listing.JobId,
+                    StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            await card.ScrollIntoViewIfNeededAsync();
+            await card.ClickAsync();
+            await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"LinkedIn job card {listing.JobId} is no longer present in the search results.");
     }
 
     private async Task<string> ReadJobDescriptionAsync(
@@ -279,6 +318,11 @@ public class BrowserService
                             .replace(/\s+/g, ' ')
                             .trim()
                             .toLowerCase();
+                        const isMoreLabel = text =>
+                            /^(?:…|\.{3})?\s*more$/i.test(normalize(text));
+                        const isRequirementsHeading = text =>
+                            normalize(text).startsWith(
+                                'requirements added by the job poster');
                         const visible = element => {
                             const style = window.getComputedStyle(element);
                             const rect = element.getBoundingClientRect();
@@ -299,10 +343,31 @@ public class BrowserService
                             for (let depth = 0; current && depth < 8; depth++) {
                                 const following = [];
                                 let sibling = current.nextElementSibling;
+                                let reachedDescriptionEnd = false;
                                 while (sibling) {
-                                    const text = (sibling.innerText || '').trim();
+                                    const siblingText = (sibling.innerText || '').trim();
+                                    if (isMoreLabel(siblingText)
+                                        || isRequirementsHeading(siblingText)) {
+                                        break;
+                                    }
+
+                                    const content = sibling.cloneNode(true);
+                                    content.querySelectorAll(
+                                        'button, [role="button"], [aria-label*="more" i]')
+                                        .forEach(element => element.remove());
+                                    let text = (content.innerText || '').trim();
+                                    const lines = text.split(/\r?\n/);
+                                    if (isMoreLabel(lines[lines.length - 1])) {
+                                        lines.pop();
+                                        reachedDescriptionEnd = true;
+                                    }
+                                    text = lines.join('\n').trim();
+
                                     if (text) {
                                         following.push(text);
+                                    }
+                                    if (reachedDescriptionEnd) {
+                                        break;
                                     }
                                     sibling = sibling.nextElementSibling;
                                 }
@@ -592,6 +657,13 @@ public class BrowserService
                     .Locator(".job-card-container__metadata-wrapper")
                     .First
                     .InnerTextAsync()).Trim();
+                var viewedBadge = card.Locator(
+                    "li.job-card-container__footer-job-state");
+                var isViewed = await viewedBadge.CountAsync() > 0
+                    && string.Equals(
+                        (await viewedBadge.First.InnerTextAsync()).Trim(),
+                        "Viewed",
+                        StringComparison.OrdinalIgnoreCase);
 
                 listings.Add(
                     jobId,
@@ -600,7 +672,8 @@ public class BrowserService
                         title,
                         company,
                         location,
-                        jobUri.AbsoluteUri));
+                        jobUri.AbsoluteUri,
+                        isViewed));
             }
             catch (Exception exception)
             {
@@ -648,7 +721,8 @@ public class BrowserService
         string Title,
         string Company,
         string Location,
-        string Url);
+        string Url,
+        bool IsViewed);
 
     private static async Task<bool> IsAuthenticationRequiredAsync(IPage page)
     {
