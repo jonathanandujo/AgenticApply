@@ -70,6 +70,7 @@ public class JobRepository
             Location,
             Description,
             EasyApply,
+            ApplyAvailable,
             Url,
             CreatedAt
         )
@@ -81,6 +82,7 @@ public class JobRepository
             $location,
             $description,
             $easyApply,
+            $applyAvailable,
             $url,
             $createdAt
         )
@@ -92,6 +94,11 @@ public class JobRepository
         command.Parameters.AddWithValue("$location", job.Location);
         command.Parameters.AddWithValue("$description", job.Description);
         command.Parameters.AddWithValue("$easyApply", job.EasyApply ? 1 : 0);
+        command.Parameters.AddWithValue(
+            "$applyAvailable",
+            job.ApplyAvailable.HasValue
+                ? job.ApplyAvailable.Value ? 1 : 0
+                : DBNull.Value);
         command.Parameters.AddWithValue("$url", job.Url ?? "");
         command.Parameters.AddWithValue(
             "$createdAt",
@@ -122,9 +129,10 @@ public class JobRepository
                     ELSE Description
                 END,
                 EasyApply = $easyApply,
+                ApplyAvailable = $applyAvailable,
                 Url = CASE WHEN Url IS NULL OR Url = '' THEN $url ELSE Url END
             WHERE JobId = $jobId
-              AND (Description = '' OR Url IS NULL OR Url = '')
+              AND (Description = '' OR Url IS NULL OR Url = '' OR ApplyAvailable IS NULL)
             """;
 
         command.Parameters.AddWithValue("$jobId", job.JobId);
@@ -133,6 +141,11 @@ public class JobRepository
         command.Parameters.AddWithValue("$location", job.Location);
         command.Parameters.AddWithValue("$description", job.Description);
         command.Parameters.AddWithValue("$easyApply", job.EasyApply ? 1 : 0);
+        command.Parameters.AddWithValue(
+            "$applyAvailable",
+            job.ApplyAvailable.HasValue
+                ? job.ApplyAvailable.Value ? 1 : 0
+                : DBNull.Value);
         command.Parameters.AddWithValue("$url", job.Url);
 
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -159,6 +172,7 @@ public class JobRepository
             Location,
             Description,
             EasyApply,
+            ApplyAvailable,
             Url
         FROM Jobs
         ORDER BY CreatedAt DESC
@@ -177,9 +191,10 @@ public class JobRepository
                 Location = reader.GetString(3),
                 Description = reader.GetString(4),
                 EasyApply = reader.GetInt32(5) == 1,
-                Url = reader.IsDBNull(6)
-                    ? ""
-                    : reader.GetString(6)
+                ApplyAvailable = reader.IsDBNull(6)
+                    ? null
+                    : reader.GetInt32(6) == 1,
+                Url = reader.IsDBNull(7) ? "" : reader.GetString(7)
             });
         }
 
@@ -205,6 +220,7 @@ public class JobRepository
             Location,
             Description,
             EasyApply,
+            ApplyAvailable,
             Url
         FROM Jobs
         WHERE JobId = $jobId
@@ -227,7 +243,10 @@ public class JobRepository
             Location = reader.GetString(3),
             Description = reader.GetString(4),
             EasyApply = reader.GetInt32(5) == 1,
-            Url = reader.IsDBNull(6) ? "" : reader.GetString(6)
+            ApplyAvailable = reader.IsDBNull(6)
+                ? null
+                : reader.GetInt32(6) == 1,
+            Url = reader.IsDBNull(7) ? "" : reader.GetString(7)
         };
     }
 }

@@ -48,6 +48,7 @@ public class DatabaseInitializer
             Location TEXT NOT NULL,
             Description TEXT NOT NULL,
             EasyApply INTEGER NOT NULL,
+            ApplyAvailable INTEGER,
             Url TEXT,
             CreatedAt TEXT NOT NULL
         );
@@ -79,6 +80,23 @@ public class DatabaseInitializer
         """;
 
         await command.ExecuteNonQueryAsync();
+
+        command.CommandText =
+        """
+        SELECT COUNT(*)
+        FROM pragma_table_info('Jobs')
+        WHERE name = 'ApplyAvailable'
+        """;
+
+        var hasApplyAvailableColumn =
+            Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
+
+        if (!hasApplyAvailableColumn)
+        {
+            command.CommandText =
+                "ALTER TABLE Jobs ADD COLUMN ApplyAvailable INTEGER;";
+            await command.ExecuteNonQueryAsync();
+        }
 
         command.CommandText =
         """

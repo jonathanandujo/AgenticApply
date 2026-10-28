@@ -12,6 +12,7 @@ export interface Job {
   location: string
   description: string
   easyApply: boolean
+  applyAvailable: boolean | null
   url: string
   evaluation: Evaluation | null
   createdAt?: string

@@ -9,4 +9,5 @@ public class Job
     public string Location { get; set; } = "";
     public string Url { get; set; } = "";
     public bool EasyApply { get; set; }
+    public bool? ApplyAvailable { get; set; }
 }

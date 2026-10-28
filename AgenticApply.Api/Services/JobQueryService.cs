@@ -92,6 +92,7 @@ public sealed class JobQueryService(
             job.Location,
             job.Description,
             job.EasyApply,
+            job.ApplyAvailable,
             job.Url,
             evaluation is null
                 ? null

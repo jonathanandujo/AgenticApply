@@ -161,7 +161,8 @@ public class BrowserService
 
                 if (existingJob is not null
                     && !string.IsNullOrWhiteSpace(existingJob.Description)
-                    && !string.IsNullOrWhiteSpace(existingJob.Url))
+                    && !string.IsNullOrWhiteSpace(existingJob.Url)
+                    && existingJob.ApplyAvailable.HasValue)
                 {
                     continue;
                 }
@@ -175,7 +176,8 @@ public class BrowserService
                     page,
                     cancellationToken,
                     searchUrl);
-                var easyApply = await DetectEasyApplyAsync(page);
+                var (easyApply, applyAvailable) =
+                    await DetectApplyButtonsAsync(page);
                 var description = await ReadJobDescriptionAsync(
                     page,
                     cancellationToken);
@@ -188,6 +190,7 @@ public class BrowserService
                     Location = listing.Location,
                     Description = description.Trim(),
                     EasyApply = easyApply,
+                    ApplyAvailable = applyAvailable,
                     Url = listing.Url
                 };
 
@@ -226,10 +229,11 @@ public class BrowserService
                 else
                 {
                     _logger.LogInformation(
-                        "Saved LinkedIn job {JobId}; description length: {DescriptionLength}; Easy Apply: {EasyApply}; LinkedIn Viewed badge: {LinkedInViewed}",
+                        "Saved LinkedIn job {JobId}; description length: {DescriptionLength}; Easy Apply: {EasyApply}; Apply available: {ApplyAvailable}; LinkedIn Viewed badge: {LinkedInViewed}",
                         job.JobId,
                         job.Description.Length,
                         job.EasyApply,
+                        job.ApplyAvailable,
                         listing.IsViewed);
                 }
             }
@@ -473,36 +477,56 @@ public class BrowserService
         }
     }
 
-    private async Task<bool> DetectEasyApplyAsync(IPage page)
+    private async Task<(bool EasyApply, bool ApplyAvailable)> DetectApplyButtonsAsync(
+        IPage page)
     {
-        var selectors = new[]
+        try
         {
-            "#jobs-apply-button-id",
-            "button.jobs-apply-button",
-            "button[aria-label*='Easy Apply']",
-            "button:has-text('Easy Apply')"
-        };
-
-        foreach (var selector in selectors)
-        {
-            try
-            {
-                var locator = page.Locator(selector).First;
-                if (await locator.CountAsync() > 0 && await locator.IsVisibleAsync())
-                {
-                    return true;
+            var buttonTypes = await page.EvaluateAsync<string[]>(
+                """
+                () => {
+                    const visible = element => {
+                        const style = window.getComputedStyle(element);
+                        const rect = element.getBoundingClientRect();
+                        return style.visibility !== 'hidden'
+                            && style.display !== 'none'
+                            && rect.width > 0
+                            && rect.height > 0;
+                    };
+                    const labels = [...document.querySelectorAll(
+                        'button, a.jobs-apply-button, a[href*="apply"], [role="button"]')]
+                        .filter(visible)
+                        .flatMap(element => [
+                            element.innerText,
+                            element.getAttribute('aria-label'),
+                            element.getAttribute('title')
+                        ])
+                        .map(text => (text || '').replace(/\s+/g, ' ').trim())
+                        .filter(Boolean);
+                    const isEasyApply = labels.some(label =>
+                        /\beasy\s+apply\b/i.test(label));
+                    const isApply = labels.some(label =>
+                        /^\s*apply(?:\b|$)/i.test(label));
+                    return [
+                        ...(isEasyApply ? ['easy'] : []),
+                        ...(isApply || isEasyApply ? ['apply'] : [])
+                    ];
                 }
-            }
-            catch (PlaywrightException exception)
-            {
-                _logger.LogDebug(
-                    exception,
-                    "Could not check LinkedIn Easy Apply using selector {Selector}",
-                    selector);
-            }
-        }
+                """);
 
-        return false;
+            var easyApply = buttonTypes.Contains("easy", StringComparer.Ordinal);
+            return (
+                easyApply,
+                easyApply || buttonTypes.Contains("apply", StringComparer.Ordinal));
+        }
+        catch (PlaywrightException exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Could not detect LinkedIn Apply buttons at {CurrentUrl}",
+                page.Url);
+            throw;
+        }
     }
 
     private async Task WaitForAuthenticationIfRequiredAsync(

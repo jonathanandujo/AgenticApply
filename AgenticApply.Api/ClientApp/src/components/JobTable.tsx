@@ -65,7 +65,7 @@ export function JobTable({ jobs, showAll = false }: JobTableProps) {
             <th scope="col">Company</th>
             <th scope="col">Title</th>
             <th scope="col">Location</th>
-            {showAll && <th scope="col">Easy apply</th>}
+            {showAll && <th scope="col">Apply option</th>}
             <th scope="col" aria-label="Open job" />
           </tr>
         </thead>
@@ -111,7 +111,13 @@ function JobTableRow({ job, showAll }: { job: Job; showAll: boolean }) {
       {showAll && (
         <td>
           <span className="table-muted">
-            {job.easyApply ? 'Available' : 'No'}
+            {job.easyApply
+              ? 'Easy Apply'
+              : job.applyAvailable === null
+                ? 'Unknown'
+                : job.applyAvailable
+                ? 'External Apply'
+                : 'No'}
           </span>
         </td>
       )}
