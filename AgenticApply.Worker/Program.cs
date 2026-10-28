@@ -7,6 +7,26 @@ Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 
 var builder = Host.CreateApplicationBuilder(args);
 
+var configuredConnectionString =
+    builder.Configuration.GetConnectionString("AgenticApply")
+    ?? throw new InvalidOperationException(
+        "ConnectionStrings:AgenticApply must be configured.");
+var sqliteConnectionString =
+    new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(
+        configuredConnectionString);
+
+if (sqliteConnectionString.DataSource != ":memory:"
+    && !sqliteConnectionString.DataSource.StartsWith(
+        "file:",
+        StringComparison.OrdinalIgnoreCase)
+    && !Path.IsPathRooted(sqliteConnectionString.DataSource))
+{
+    sqliteConnectionString.DataSource = Path.GetFullPath(
+        Path.Combine(
+            builder.Environment.ContentRootPath,
+            sqliteConnectionString.DataSource));
+}
+
 builder.Services
     .AddOptions<AgentOptions>()
     .Bind(builder.Configuration.GetSection(AgentOptions.SectionName))
@@ -20,9 +40,14 @@ builder.Services.Configure<OllamaSettings>(
 builder.Services.Configure<LinkedInSettings>(
     builder.Configuration.GetSection("LinkedIn"));
 
-builder.Services.AddSingleton<DatabaseInitializer>();
-builder.Services.AddSingleton<JobRepository>();
-builder.Services.AddSingleton<EvaluationRepository>();
+builder.Services.AddSingleton(
+    new DatabaseInitializer(sqliteConnectionString.ConnectionString));
+builder.Services.AddSingleton(
+    new JobRepository(sqliteConnectionString.ConnectionString));
+builder.Services.AddSingleton(
+    new EvaluationRepository(sqliteConnectionString.ConnectionString));
+builder.Services.AddSingleton(
+    new AgentSettingsRepository(sqliteConnectionString.ConnectionString));
 builder.Services.AddSingleton<CandidateProfileService>();
 builder.Services.AddSingleton<BrowserService>();
 builder.Services.AddHttpClient<OllamaService>();

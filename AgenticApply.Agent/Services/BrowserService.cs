@@ -2,23 +2,26 @@ using AgenticApply.Agent.Models;
 using AgenticApply.Agent.Data;
 using Microsoft.Playwright;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace AgenticApply.Agent.Services;
 
 public class BrowserService
 {
-    private const string LinkedInJobsUrl =
-        "https://www.linkedin.com/jobs/search/?currentJobId=4481802072&distance=25.0&f_AL=true&f_TPR=r86400&f_WT=2&geoId=103323778&keywords=c%23&origin=JOBS_HOME_KEYWORD_HISTORY";
+    private const int MaximumJobsPerScan = 200;
 
     private readonly JobRepository _jobRepository;
     private readonly ILogger<BrowserService> _logger;
+    private readonly LinkedInSettings _linkedInSettings;
 
     public BrowserService(
         JobRepository jobRepository,
-        ILogger<BrowserService> logger)
+        ILogger<BrowserService> logger,
+        IOptions<LinkedInSettings> linkedInSettings)
     {
         _jobRepository = jobRepository;
         _logger = logger;
+        _linkedInSettings = linkedInSettings.Value;
     }
 
     public async Task LoginToLinkedInAsync()
@@ -31,7 +34,7 @@ public class BrowserService
                 Headless = false
             });
 
-        var context =
+        await using var context =
     await playwright.Chromium.LaunchPersistentContextAsync(
         "BrowserData",
         new()
@@ -42,7 +45,7 @@ public class BrowserService
 
         var page = await context.NewPageAsync();
 
-        await page.GotoAsync("https://www.linkedin.com/jobs/search/?currentJobId=4481802072&distance=25.0&f_AL=true&f_TPR=r86400&f_WT=2&geoId=103323778&keywords=c%23&origin=JOBS_HOME_KEYWORD_HISTORY");
+        await page.GotoAsync(_linkedInSettings.JobsUrl);
 
         Console.WriteLine("Inicia sesión manualmente.");
         Console.WriteLine("Presiona ENTER cuando termines.");
@@ -82,13 +85,18 @@ public class BrowserService
 
     public async Task<List<Job>> GetJobsAsync(
         bool persistJobs = true,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? jobsUrl = null)
     {
         var jobs = new List<Job>();
+        var searchUrl = ValidateJobsUrl(
+            string.IsNullOrWhiteSpace(jobsUrl)
+                ? _linkedInSettings.JobsUrl
+                : jobsUrl);
 
         using var playwright = await Playwright.CreateAsync();
 
-        var context =
+        await using var context =
             await playwright.Chromium.LaunchPersistentContextAsync(
                 "BrowserData",
                 new BrowserTypeLaunchPersistentContextOptions
@@ -102,57 +110,54 @@ public class BrowserService
             ?? await context.NewPageAsync();
 
         await page.GotoAsync(
-            LinkedInJobsUrl,
+            searchUrl,
             new PageGotoOptions
             {
                 WaitUntil = WaitUntilState.DOMContentLoaded
             });
 
-        await WaitForAuthenticationIfRequiredAsync(page, cancellationToken);
+        await WaitForAuthenticationIfRequiredAsync(
+            page,
+            cancellationToken,
+            searchUrl);
         await page.WaitForTimeoutAsync(5000);
 
         var cards = page.Locator("div[data-job-id]");
 
-        var count = await cards.CountAsync();
+        var listings = await LoadAvailableJobListingsAsync(
+            page,
+            cards,
+            cancellationToken,
+            searchUrl);
 
-        Console.WriteLine($"Encontrados: {count}");
+        _logger.LogInformation(
+            "LinkedIn job search found {JobCount} job listings",
+            listings.Count);
 
-        for (int i = 0; i < count; i++)
+        foreach (var listing in listings)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             try
             {
-                await WaitForAuthenticationIfRequiredAsync(page, cancellationToken);
+                if (await _jobRepository.ExistsAsync(
+                    listing.JobId,
+                    cancellationToken))
+                {
+                    continue;
+                }
 
-                var card = cards.Nth(i);
-
-                var jobId =
-                    await card.GetAttributeAsync("data-job-id")
-                    ?? string.Empty;
-
-                var title =
-                    await card
-                        .Locator("a[href*='/jobs/view/']")
-                        .First
-                        .InnerTextAsync();
-
-                var company =
-                    await card
-                        .Locator(".artdeco-entity-lockup__subtitle")
-                        .First
-                        .InnerTextAsync();
-
-                var location =
-                    await card
-                        .Locator(".job-card-container__metadata-wrapper")
-                        .First
-                        .InnerTextAsync();
-
-                await card.ClickAsync();
-
-                await page.WaitForTimeoutAsync(2000);
-                await WaitForAuthenticationIfRequiredAsync(page, cancellationToken);
+                await page.GotoAsync(
+                    listing.Url,
+                    new PageGotoOptions
+                    {
+                        WaitUntil = WaitUntilState.DOMContentLoaded
+                    });
+                await WaitForAuthenticationIfRequiredAsync(
+                    page,
+                    cancellationToken,
+                    listing.Url);
+                await page.WaitForTimeoutAsync(1500);
 
                 var easyApply =
                     await page
@@ -192,33 +197,25 @@ public class BrowserService
                     }
                 }
 
-                if (!await _jobRepository.ExistsAsync(jobId))
+                var job = new Job
                 {
-                    var job = new Job
-                    {
-                        JobId = jobId,
-                        Title = title.Trim(),
-                        Company = company.Trim(),
-                        Location = location.Trim(),
-                        Description = description.Trim(),
-                        EasyApply = easyApply
-                    };
+                    JobId = listing.JobId,
+                    Title = listing.Title,
+                    Company = listing.Company,
+                    Location = listing.Location,
+                    Description = description.Trim(),
+                    EasyApply = easyApply,
+                    Url = listing.Url
+                };
 
-                    if (persistJobs)
-                    {
-                        await _jobRepository.InsertAsync(job);
-                    }
-
-                    jobs.Add(job);
+                if (persistJobs)
+                {
+                    await _jobRepository.InsertAsync(
+                        job,
+                        cancellationToken);
                 }
 
-                Console.WriteLine("================================");
-                Console.WriteLine(title);
-                Console.WriteLine(company);
-                Console.WriteLine(location);
-                Console.WriteLine(easyApply);
-                Console.WriteLine(
-                    $"Description Length: {description.Length}");
+                jobs.Add(job);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -228,10 +225,14 @@ public class BrowserService
             {
                 _logger.LogError(
                     ex,
-                    "Failed to scrape LinkedIn job card at index {JobIndex}",
-                    i);
+                    "Failed to scrape LinkedIn job {JobId} ({JobTitle})",
+                    listing.JobId,
+                    listing.Title);
 
-                await WaitForAuthenticationIfRequiredAsync(page, cancellationToken);
+                await WaitForAuthenticationIfRequiredAsync(
+                    page,
+                    cancellationToken,
+                    listing.Url);
             }
         }
 
@@ -240,7 +241,8 @@ public class BrowserService
 
     private async Task WaitForAuthenticationIfRequiredAsync(
         IPage page,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string returnUrl)
     {
         if (!await IsAuthenticationRequiredAsync(page))
         {
@@ -259,14 +261,193 @@ public class BrowserService
         }
 
         _logger.LogInformation(
-            "LinkedIn authentication detected. Resuming the job search.");
+            "LinkedIn authentication detected. Resuming the current page.");
         await page.GotoAsync(
-            LinkedInJobsUrl,
+            returnUrl,
             new PageGotoOptions
             {
                 WaitUntil = WaitUntilState.DOMContentLoaded
             });
     }
+
+    private async Task<List<JobListing>> LoadAvailableJobListingsAsync(
+        IPage page,
+        ILocator cards,
+        CancellationToken cancellationToken,
+        string searchUrl)
+    {
+        var listings = new Dictionary<string, JobListing>();
+        var stableRounds = 0;
+
+        while (stableRounds < 3 && listings.Count < MaximumJobsPerScan)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await WaitForAuthenticationIfRequiredAsync(
+                page,
+                cancellationToken,
+                searchUrl);
+
+            var previousCount = listings.Count;
+            await CaptureVisibleJobListingsAsync(
+                cards,
+                listings,
+                cancellationToken);
+
+            if (listings.Count >= MaximumJobsPerScan)
+            {
+                break;
+            }
+
+            var count = await cards.CountAsync();
+            if (count > 0)
+            {
+                var lastCard = cards.Nth(count - 1);
+                await lastCard.ScrollIntoViewIfNeededAsync();
+                await lastCard.EvaluateAsync(
+                    """
+                    element => {
+                        let container = element.parentElement;
+                        while (container && container !== document.body) {
+                            const style = window.getComputedStyle(container);
+                            if (container.scrollHeight > container.clientHeight
+                                && /(auto|scroll)/.test(style.overflowY)) {
+                                container.scrollTop = container.scrollHeight;
+                                return;
+                            }
+                            container = container.parentElement;
+                        }
+                        window.scrollTo(0, document.body.scrollHeight);
+                    }
+                    """);
+            }
+
+            await page.WaitForTimeoutAsync(1200);
+            stableRounds = listings.Count > previousCount
+                ? 0
+                : stableRounds + 1;
+        }
+
+        await WaitForAuthenticationIfRequiredAsync(
+            page,
+            cancellationToken,
+            searchUrl);
+        await CaptureVisibleJobListingsAsync(
+            cards,
+            listings,
+            cancellationToken);
+
+        if (listings.Count >= MaximumJobsPerScan)
+        {
+            _logger.LogWarning(
+                "Stopped loading LinkedIn results at the per-scan limit of {MaximumJobs}",
+                MaximumJobsPerScan);
+        }
+
+        return listings.Values.Take(MaximumJobsPerScan).ToList();
+    }
+
+    private async Task CaptureVisibleJobListingsAsync(
+        ILocator cards,
+        IDictionary<string, JobListing> listings,
+        CancellationToken cancellationToken)
+    {
+        var count = await cards.CountAsync();
+
+        for (var index = 0;
+             index < count && listings.Count < MaximumJobsPerScan;
+             index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var card = cards.Nth(index);
+            var jobId = await card.GetAttributeAsync("data-job-id");
+            if (string.IsNullOrWhiteSpace(jobId) || listings.ContainsKey(jobId))
+            {
+                continue;
+            }
+
+            try
+            {
+                var titleLocator = card.Locator("a[href*='/jobs/view/']").First;
+                var title = (await titleLocator.InnerTextAsync()).Trim();
+                var href = await titleLocator.GetAttributeAsync("href");
+                if (string.IsNullOrWhiteSpace(title)
+                    || string.IsNullOrWhiteSpace(href))
+                {
+                    continue;
+                }
+
+                var jobUri = new Uri(new Uri("https://www.linkedin.com"), href);
+                if (!IsLinkedInJobUrl(jobUri))
+                {
+                    continue;
+                }
+
+                var company = (await card
+                    .Locator(".artdeco-entity-lockup__subtitle")
+                    .First
+                    .InnerTextAsync()).Trim();
+                var location = (await card
+                    .Locator(".job-card-container__metadata-wrapper")
+                    .First
+                    .InnerTextAsync()).Trim();
+
+                listings.Add(
+                    jobId,
+                    new JobListing(
+                        jobId,
+                        title,
+                        company,
+                        location,
+                        jobUri.AbsoluteUri));
+            }
+            catch (Exception exception)
+            {
+                _logger.LogDebug(
+                    exception,
+                    "Could not read LinkedIn job listing {JobId}",
+                    jobId);
+            }
+        }
+    }
+
+    private static string ValidateJobsUrl(string jobsUrl)
+    {
+        if (!Uri.TryCreate(jobsUrl, UriKind.Absolute, out var uri)
+            || uri.UserInfo.Length > 0
+            || !IsLinkedInHost(uri)
+            || uri.Scheme != Uri.UriSchemeHttps
+            || !(uri.AbsolutePath.Equals(
+                    "/jobs/search",
+                    StringComparison.OrdinalIgnoreCase)
+                || uri.AbsolutePath.StartsWith(
+                    "/jobs/search/",
+                    StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException(
+                "LinkedIn JobsUrl must be an HTTPS LinkedIn jobs search URL.");
+        }
+
+        return uri.AbsoluteUri;
+    }
+
+    private static bool IsLinkedInJobUrl(Uri uri) =>
+        uri.Scheme == Uri.UriSchemeHttps
+        && IsLinkedInHost(uri)
+        && uri.AbsolutePath.StartsWith(
+            "/jobs/view/",
+            StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsLinkedInHost(Uri uri) =>
+        uri.Host.Equals("linkedin.com", StringComparison.OrdinalIgnoreCase)
+        || uri.Host.EndsWith(".linkedin.com", StringComparison.OrdinalIgnoreCase);
+
+    private sealed record JobListing(
+        string JobId,
+        string Title,
+        string Company,
+        string Location,
+        string Url);
 
     private static async Task<bool> IsAuthenticationRequiredAsync(IPage page)
     {

@@ -8,8 +8,10 @@ public sealed class AgentPipelineService(
     BrowserService browserService,
     JobRepository jobRepository,
     EvaluationRepository evaluationRepository,
+    AgentSettingsRepository agentSettingsRepository,
     OllamaService ollamaService,
     IOptions<AgentOptions> options,
+    IOptions<LinkedInSettings> linkedInSettings,
     ILogger<AgentPipelineService> logger) : IAgentPipelineService
 {
     private readonly AgentOptions _options = options.Value;
@@ -20,10 +22,15 @@ public sealed class AgentPipelineService(
             "Starting LinkedIn job scan. DryRun: {DryRun}",
             _options.DryRun);
 
+        var jobsUrl = await agentSettingsRepository.GetLinkedInJobsUrlAsync(
+            cancellationToken)
+            ?? linkedInSettings.Value.JobsUrl;
+
         // Scraping persists new jobs in live mode; dry-run returns them without database writes.
         var scannedJobs = await browserService.GetJobsAsync(
             persistJobs: !_options.DryRun,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken,
+            jobsUrl: jobsUrl);
 
         cancellationToken.ThrowIfCancellationRequested();
 

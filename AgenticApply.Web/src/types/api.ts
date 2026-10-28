@@ -31,3 +31,7 @@ export interface Stats {
   lastExecution?: string | null
   jobsDiscoveredByDay?: DailyDiscovery[]
 }
+
+export interface LinkedInSearchSettings {
+  jobsUrl: string
+}

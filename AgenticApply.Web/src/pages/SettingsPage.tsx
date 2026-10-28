@@ -1,8 +1,13 @@
-import { Activity, Bot, BriefcaseBusiness, Database, Sparkles } from 'lucide-react'
+import { Activity, Bot, BriefcaseBusiness, Database, Link2, Save, Sparkles } from 'lucide-react'
+import { useState, type FormEvent } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { ErrorState, LoadingState } from '../components/QueryState'
-import { useStats } from '../hooks/useJobs'
+import {
+  useLinkedInSearchSettings,
+  useStats,
+  useUpdateLinkedInSearchUrl,
+} from '../hooks/useJobs'
 
 function formatDate(value?: string | null) {
   if (!value) return 'Not reported by API'
@@ -17,6 +22,7 @@ function formatDate(value?: string | null) {
 
 export function SettingsPage() {
   const query = useStats()
+  const linkedInQuery = useLinkedInSearchSettings()
 
   return (
     <div className="page-stack">
@@ -71,6 +77,18 @@ export function SettingsPage() {
               </div>
             </div>
           </Panel>
+          <Panel
+            title="LinkedIn job search"
+            subtitle="Choose the LinkedIn search results the worker scans."
+          >
+            {linkedInQuery.isLoading ? (
+              <LoadingState label="Loading LinkedIn settings…" />
+            ) : linkedInQuery.isError ? (
+              <ErrorState onRetry={() => void linkedInQuery.refetch()} />
+            ) : linkedInQuery.data ? (
+              <LinkedInSearchUrlForm initialUrl={linkedInQuery.data.jobsUrl} />
+            ) : null}
+          </Panel>
           <div className="settings-info">
             <span className="info-spark"><Sparkles size={16} /></span>
             <p>
@@ -82,5 +100,66 @@ export function SettingsPage() {
         </>
       )}
     </div>
+  )
+}
+
+function LinkedInSearchUrlForm({ initialUrl }: { initialUrl: string }) {
+  const updateUrl = useUpdateLinkedInSearchUrl()
+  const [jobsUrl, setJobsUrl] = useState(initialUrl)
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    updateUrl.mutate(jobsUrl.trim())
+  }
+
+  return (
+    <form className="linkedin-settings-form" onSubmit={handleSubmit}>
+      <label htmlFor="linkedin-jobs-url">Search URL</label>
+      <input
+        id="linkedin-jobs-url"
+        type="url"
+        required
+        maxLength={2048}
+        value={jobsUrl}
+        onChange={(event) => setJobsUrl(event.target.value)}
+        placeholder="https://www.linkedin.com/jobs/search/?keywords=..."
+      />
+      <div className="linkedin-settings-actions">
+        <p>
+          Changes are saved for the worker’s next scan. Use a LinkedIn jobs
+          search URL.
+        </p>
+        <button
+          className="button button-primary"
+          type="submit"
+          disabled={
+            updateUrl.isPending
+            || !jobsUrl.trim()
+            || jobsUrl === initialUrl
+          }
+        >
+          {updateUrl.isPending ? (
+            'Saving…'
+          ) : (
+            <>
+              <Save size={14} />
+              Save URL
+            </>
+          )}
+        </button>
+      </div>
+      {updateUrl.isError && (
+        <p className="linkedin-settings-error" role="alert">
+          Could not save the URL. Check that it is an HTTPS LinkedIn jobs
+          search URL and that the API is available.
+        </p>
+      )}
+      {updateUrl.isSuccess && (
+        <p className="linkedin-settings-success" role="status">
+          <Link2 size={13} />
+          URL saved. The worker will use it on its next scan.
+        </p>
+      )}
+    </form>
   )
 }

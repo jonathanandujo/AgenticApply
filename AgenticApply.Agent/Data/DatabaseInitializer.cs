@@ -69,6 +69,13 @@ public class DatabaseInitializer
             AppliedAt TEXT,
             Notes TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS AgentSettings
+        (
+            SettingKey TEXT PRIMARY KEY,
+            SettingValue TEXT NOT NULL,
+            UpdatedAt TEXT NOT NULL
+        );
         """;
 
         await command.ExecuteNonQueryAsync();

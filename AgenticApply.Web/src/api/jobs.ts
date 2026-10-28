@@ -1,4 +1,4 @@
-import type { Job, Stats } from '../types/api'
+import type { Job, LinkedInSearchSettings, Stats } from '../types/api'
 import { apiClient } from './client'
 
 export async function getJobs(signal?: AbortSignal): Promise<Job[]> {
@@ -33,5 +33,25 @@ export async function reevaluateJob(
 
 export async function getStats(signal?: AbortSignal): Promise<Stats> {
   const { data } = await apiClient.get<Stats>('/stats', { signal })
+  return data
+}
+
+export async function getLinkedInSearchSettings(
+  signal?: AbortSignal,
+): Promise<LinkedInSearchSettings> {
+  const { data } = await apiClient.get<LinkedInSearchSettings>(
+    '/settings/linkedin-search',
+    { signal },
+  )
+  return data
+}
+
+export async function updateLinkedInSearchUrl(
+  jobsUrl: string,
+): Promise<LinkedInSearchSettings> {
+  const { data } = await apiClient.put<LinkedInSearchSettings>(
+    '/settings/linkedin-search',
+    { jobsUrl },
+  )
   return data
 }

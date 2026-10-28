@@ -34,6 +34,18 @@ Content-Type: application/json
 GET {{AgenticApply.Api_HostAddress}}/stats
 Accept: application/json
 
+### Get the worker's LinkedIn jobs-search URL
+GET {{AgenticApply.Api_HostAddress}}/settings/linkedin-search
+Accept: application/json
+
+### Update the worker's LinkedIn jobs-search URL
+PUT {{AgenticApply.Api_HostAddress}}/settings/linkedin-search
+Content-Type: application/json
+
+{
+  "jobsUrl": "https://www.linkedin.com/jobs/search/?keywords=software%20engineer&location=United%20States"
+}
+
 ### Get the OpenAPI document in Development
 GET {{AgenticApply.Api_HostAddress}}/openapi/v1.json
 Accept: application/json

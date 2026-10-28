@@ -8,5 +8,5 @@ public sealed class AgentOptions
 
     public int ScanIntervalMinutes { get; set; } = 120;
 
-    public bool DryRun { get; set; } = true;
+    public bool DryRun { get; set; }
 }

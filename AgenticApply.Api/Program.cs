@@ -49,9 +49,14 @@ builder.Services.AddSingleton(
 builder.Services.AddSingleton(
     new EvaluationRepository(sqliteConnectionString.ConnectionString));
 builder.Services.AddSingleton(
+    new AgentSettingsRepository(sqliteConnectionString.ConnectionString));
+builder.Services.AddSingleton(
     new DatabaseInitializer(sqliteConnectionString.ConnectionString));
 builder.Services.AddScoped<IJobQueryService, JobQueryService>();
 builder.Services.AddScoped<IJobReevaluationService, JobReevaluationService>();
+builder.Services.AddScoped<ILinkedInSettingsService, LinkedInSettingsService>();
+builder.Services.Configure<LinkedInSettings>(
+    builder.Configuration.GetSection("LinkedIn"));
 builder.Services.Configure<OllamaSettings>(
     builder.Configuration.GetSection("Ollama"));
 builder.Services.PostConfigure<OllamaSettings>(settings =>
@@ -92,6 +97,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapJobEndpoints();
+app.MapLinkedInSettingsEndpoints();
 app.MapStatsEndpoint();
 
 app.Run();
