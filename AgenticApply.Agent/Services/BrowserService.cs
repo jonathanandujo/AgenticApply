@@ -10,6 +10,9 @@ namespace AgenticApply.Agent.Services;
 public class BrowserService
 {
     private const int MaximumJobsPerScan = 200;
+    private static readonly TimeSpan EasyApplyButtonWait = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan ApplicationDialogWait = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan ApplicationStepWait = TimeSpan.FromSeconds(30);
     private static readonly SemaphoreSlim BrowserSessionLock = new(1, 1);
 
     private readonly JobRepository _jobRepository;
@@ -319,15 +322,31 @@ public class BrowserService
             cancellationToken,
             jobUri.AbsoluteUri);
 
-        var applyButton = await FindEasyApplyButtonAsync(page);
+        _logger.LogInformation(
+            "Waiting for LinkedIn's Easy Apply action for job {JobId}",
+            jobId);
+        var applyButton = await FindEasyApplyButtonAsync(
+            page,
+            cancellationToken);
         if (applyButton is null)
         {
+            _logger.LogWarning(
+                "LinkedIn's Easy Apply action did not appear within {WaitSeconds} seconds for job {JobId}",
+                EasyApplyButtonWait.TotalSeconds,
+                jobId);
             return new(
                 EasyApplyAttemptStatus.NotEasyApply,
-                "LinkedIn's job page does not show an Easy Apply button.");
+                "LinkedIn's job page did not show an Easy Apply button within 60 seconds. Complete the application manually.");
         }
 
-        await applyButton.ClickAsync();
+        _logger.LogInformation(
+            "Clicking LinkedIn's Easy Apply action for job {JobId}",
+            jobId);
+        await applyButton.ClickAsync(new LocatorClickOptions
+        {
+            Timeout = (float)ApplicationDialogWait.TotalMilliseconds
+        });
+
         var dialog = page.Locator("[role='dialog']").Last;
         try
         {
@@ -335,15 +354,22 @@ public class BrowserService
                 new LocatorWaitForOptions
                 {
                     State = WaitForSelectorState.Visible,
-                    Timeout = 10_000
+                    Timeout = (float)ApplicationDialogWait.TotalMilliseconds
                 });
         }
         catch (TimeoutException)
         {
+            _logger.LogWarning(
+                "Easy Apply was clicked for job {JobId}, but LinkedIn did not open the application dialog",
+                jobId);
             return new(
                 EasyApplyAttemptStatus.NeedsManualInput,
                 "LinkedIn did not open the Easy Apply form. Complete the application manually.");
         }
+
+        _logger.LogInformation(
+            "LinkedIn Easy Apply dialog opened for job {JobId}",
+            jobId);
 
         for (var step = 0; step < 12; step++)
         {
@@ -357,35 +383,10 @@ public class BrowserService
                     "LinkedIn confirmed that the application was submitted.");
             }
 
-            var buttons = await dialog.Locator("button").AllAsync();
-            ILocator? submitButton = null;
-            ILocator? continueButton = null;
-
-            foreach (var button in buttons)
-            {
-                if (!await button.IsVisibleAsync() || !await button.IsEnabledAsync())
-                {
-                    continue;
-                }
-
-                var label = await GetButtonLabelAsync(button);
-                if (Regex.IsMatch(
-                        label,
-                        @"^submit\s+application\b",
-                        RegexOptions.IgnoreCase))
-                {
-                    submitButton = button;
-                    break;
-                }
-
-                if (Regex.IsMatch(
-                        label,
-                        @"^(next|continue|review)(?:\b|$)",
-                        RegexOptions.IgnoreCase))
-                {
-                    continueButton ??= button;
-                }
-            }
+            var (submitButton, continueButton) =
+                await WaitForApplicationStepButtonsAsync(
+                    dialog,
+                    cancellationToken);
 
             if (submitButton is not null)
             {
@@ -416,7 +417,7 @@ public class BrowserService
             {
                 return new(
                     EasyApplyAttemptStatus.NeedsManualInput,
-                    "The application needs a step AgenticApply cannot complete. Nothing was submitted; reopen the job on LinkedIn to continue manually.");
+                    "The application needs a step AgenticApply cannot complete, or LinkedIn did not finish loading its controls. Nothing was submitted; reopen the job on LinkedIn to continue manually.");
             }
 
             if (await HasInvalidRequiredFieldsAsync(dialog))
@@ -427,25 +428,20 @@ public class BrowserService
             }
 
             var previousText = dialogText;
+            var continueLabel = await GetButtonLabelAsync(continueButton);
+            _logger.LogInformation(
+                "Clicking LinkedIn Easy Apply step {Step} ({ButtonLabel})",
+                step + 1,
+                continueLabel);
             await continueButton.ClickAsync();
-            await page.WaitForTimeoutAsync(800);
-
-            if (!await dialog.IsVisibleAsync())
-            {
-                return new(
-                    EasyApplyAttemptStatus.SubmissionUnconfirmed,
-                    "The Easy Apply dialog closed before LinkedIn confirmed submission. Check LinkedIn before retrying.");
-            }
-
-            var currentText = await dialog.InnerTextAsync();
-            if (string.Equals(
+            if (!await WaitForApplicationStepChangeAsync(
+                    dialog,
                     previousText,
-                    currentText,
-                    StringComparison.Ordinal))
+                    cancellationToken))
             {
                 return new(
                     EasyApplyAttemptStatus.NeedsManualInput,
-                    "LinkedIn did not advance to the next step. Nothing was submitted; reopen the job on LinkedIn to review and continue manually.");
+                    "LinkedIn did not advance after selecting the next application step. Nothing was submitted; reopen the job on LinkedIn to review and continue manually.");
             }
         }
 
@@ -461,34 +457,134 @@ public class BrowserService
         return new BrowserSessionLease(BrowserSessionLock);
     }
 
-    private static async Task<ILocator?> FindEasyApplyButtonAsync(IPage page)
+    private static async Task<ILocator?> FindEasyApplyButtonAsync(
+        IPage page,
+        CancellationToken cancellationToken)
     {
         var selectors = new[]
         {
             "#jobs-apply-button-id",
-            "button.jobs-apply-button"
+            "button.jobs-apply-button",
+            "button, [role='button']"
         };
 
-        foreach (var selector in selectors)
+        var deadline = DateTimeOffset.UtcNow + EasyApplyButtonWait;
+        while (DateTimeOffset.UtcNow < deadline)
         {
-            var locator = page.Locator(selector).First;
-            if (await locator.CountAsync() == 0
-                || !await locator.IsVisibleAsync())
+            cancellationToken.ThrowIfCancellationRequested();
+
+            foreach (var selector in selectors)
             {
-                continue;
+                var candidates = page.Locator(selector);
+                var count = await candidates.CountAsync();
+                for (var index = 0; index < count; index++)
+                {
+                    var candidate = candidates.Nth(index);
+                    if (!await candidate.IsVisibleAsync()
+                        || !await candidate.IsEnabledAsync())
+                    {
+                        continue;
+                    }
+
+                    var label = await GetButtonLabelAsync(candidate);
+                    if (Regex.IsMatch(
+                            label,
+                            @"\beasy\s+apply\b",
+                            RegexOptions.IgnoreCase))
+                    {
+                        return candidate;
+                    }
+                }
             }
 
-            var label = await GetButtonLabelAsync(locator);
-            if (Regex.IsMatch(
-                    label,
-                    @"\beasy\s+apply\b",
-                    RegexOptions.IgnoreCase))
-            {
-                return locator;
-            }
+            await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
         }
 
         return null;
+    }
+
+    private static async Task<bool> WaitForApplicationStepChangeAsync(
+        ILocator dialog,
+        string previousText,
+        CancellationToken cancellationToken)
+    {
+        var deadline = DateTimeOffset.UtcNow + ApplicationStepWait;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!await dialog.IsVisibleAsync())
+            {
+                return false;
+            }
+
+            var currentText = await dialog.InnerTextAsync();
+            if (!string.Equals(
+                    previousText,
+                    currentText,
+                    StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+        }
+
+        return false;
+    }
+
+    private static async Task<(ILocator? SubmitButton, ILocator? ContinueButton)>
+        WaitForApplicationStepButtonsAsync(
+            ILocator dialog,
+            CancellationToken cancellationToken)
+    {
+        var deadline = DateTimeOffset.UtcNow + ApplicationStepWait;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!await dialog.IsVisibleAsync())
+            {
+                return (null, null);
+            }
+
+            var buttons = await dialog.Locator("button").AllAsync();
+            ILocator? submitButton = null;
+            ILocator? continueButton = null;
+            foreach (var button in buttons)
+            {
+                if (!await button.IsVisibleAsync()
+                    || !await button.IsEnabledAsync())
+                {
+                    continue;
+                }
+
+                var label = await GetButtonLabelAsync(button);
+                if (Regex.IsMatch(
+                        label,
+                        @"^submit(?:\s+application)?(?:\b|$)",
+                        RegexOptions.IgnoreCase))
+                {
+                    submitButton = button;
+                    break;
+                }
+
+                if (Regex.IsMatch(
+                        label,
+                        @"^(next|continue|review)(?:\b|$)",
+                        RegexOptions.IgnoreCase))
+                {
+                    continueButton ??= button;
+                }
+            }
+
+            if (submitButton is not null || continueButton is not null)
+            {
+                return (submitButton, continueButton);
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+        }
+
+        return (null, null);
     }
 
     private static async Task<string> GetButtonLabelAsync(ILocator button)
