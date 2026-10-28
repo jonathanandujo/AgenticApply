@@ -257,17 +257,11 @@ public class BrowserService
         IPage page,
         CancellationToken cancellationToken)
     {
-        var selectors = new[]
-        {
-            ".jobs-description-content__text",
-            ".jobs-box__html-content",
-            ".jobs-description__content",
-            "#job-details",
-            ".jobs-description",
-            "[class*='jobs-description']"
-        };
-
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
+        const int timeoutSeconds = 30;
+        const int minimumWaitSeconds = 5;
+        const int minimumCompleteDescriptionLength = 120;
+        var startedAt = DateTimeOffset.UtcNow;
+        var deadline = startedAt.AddSeconds(timeoutSeconds);
         var previousText = string.Empty;
         var stableTextReads = 0;
 
@@ -275,78 +269,141 @@ public class BrowserService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            await ExpandJobDescriptionAsync(page);
-
-            foreach (var selector in selectors)
+            try
             {
-                try
-                {
-                    var locator = page.Locator(selector).First;
-                    if (await locator.CountAsync() == 0
-                        || !await locator.IsVisibleAsync())
-                    {
-                        continue;
-                    }
+                await ExpandJobDescriptionAsync(page);
+                var candidates = await page.EvaluateAsync<string[]>(
+                    """
+                    () => {
+                        const normalize = text => (text || '')
+                            .replace(/\s+/g, ' ')
+                            .trim()
+                            .toLowerCase();
+                        const visible = element => {
+                            const style = window.getComputedStyle(element);
+                            const rect = element.getBoundingClientRect();
+                            return style.visibility !== 'hidden'
+                                && style.display !== 'none'
+                                && rect.width > 0
+                                && rect.height > 0;
+                        };
+                        const headings = [...document.querySelectorAll(
+                            'h1, h2, h3, h4, h5, h6, [role="heading"], span, div')]
+                            .filter(element =>
+                                visible(element)
+                                && normalize(element.innerText) === 'about the job');
+                        const descriptions = [];
 
-                    var text = (await locator.InnerTextAsync()).Trim();
-                    if (!string.IsNullOrWhiteSpace(text))
-                    {
-                        if (text.Equals(previousText, StringComparison.Ordinal))
-                        {
-                            stableTextReads++;
-                            if (stableTextReads >= 2)
-                            {
-                                return text;
+                        for (const heading of headings) {
+                            let current = heading;
+                            for (let depth = 0; current && depth < 8; depth++) {
+                                const following = [];
+                                let sibling = current.nextElementSibling;
+                                while (sibling) {
+                                    const text = (sibling.innerText || '').trim();
+                                    if (text) {
+                                        following.push(text);
+                                    }
+                                    sibling = sibling.nextElementSibling;
+                                }
+
+                                const description = following.join('\n').trim();
+                                if (description) {
+                                    descriptions.push(description);
+                                    break;
+                                }
+                                current = current.parentElement;
                             }
                         }
-                        else
-                        {
-                            previousText = text;
-                            stableTextReads = 0;
-                        }
+
+                        return [...new Set(descriptions)]
+                            .filter(text => text.length > 0);
+                    }
+                    """);
+
+                var text = candidates
+                    .OrderByDescending(candidate => candidate.Length)
+                    .FirstOrDefault();
+
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    if (text.Equals(previousText, StringComparison.Ordinal))
+                    {
+                        stableTextReads++;
+                    }
+                    else
+                    {
+                        previousText = text;
+                        stableTextReads = 0;
+                    }
+
+                    var elapsed = DateTimeOffset.UtcNow - startedAt;
+                    var minimumWaitElapsed =
+                        elapsed >= TimeSpan.FromSeconds(minimumWaitSeconds);
+                    var descriptionLooksComplete =
+                        text.Length >= minimumCompleteDescriptionLength;
+
+                    if (stableTextReads >= 2
+                        && minimumWaitElapsed
+                        && (descriptionLooksComplete
+                            || elapsed >= TimeSpan.FromSeconds(10)))
+                    {
+                        return text;
                     }
                 }
-                catch (PlaywrightException exception)
-                {
-                    _logger.LogDebug(
-                        exception,
-                        "Could not read LinkedIn description using selector {Selector}",
-                        selector);
-                }
+            }
+            catch (PlaywrightException exception)
+            {
+                _logger.LogDebug(
+                    exception,
+                    "Could not read the LinkedIn job description at {CurrentUrl}",
+                    page.Url);
             }
 
             await Task.Delay(TimeSpan.FromMilliseconds(750), cancellationToken);
         }
 
         _logger.LogWarning(
-            "Timed out waiting 30 seconds for LinkedIn job description at {CurrentUrl}",
-            page.Url);
+            "Timed out after {TimeoutSeconds} seconds waiting for LinkedIn job description at {CurrentUrl}; last visible description text length: {DescriptionLength}",
+            timeoutSeconds,
+            page.Url,
+            previousText.Length);
 
-        return string.Empty;
+        return previousText;
     }
 
-    private static async Task ExpandJobDescriptionAsync(IPage page)
+    private async Task ExpandJobDescriptionAsync(IPage page)
     {
         var showMoreSelectors = new[]
         {
             "button.jobs-description__footer-button",
+            ".jobs-description__container button:has-text('more')",
+            ".jobs-description__content button:has-text('more')",
+            "[class*='jobs-description'] button:has-text('more')",
+            "#job-details button:has-text('more')",
             "button:has-text('…see more')",
             "button:has-text('...see more')",
             "button:has-text('See more')",
-            "button[aria-label*='See more']",
-            "button:has-text('… more')",
-            "button:has-text('... more')",
-            "button:has-text(' more')",
-            "button[aria-label*=' more']"
+            "button[aria-label*='See more']"
         };
 
         foreach (var selector in showMoreSelectors)
         {
-            var button = page.Locator(selector).First;
-            if (await button.CountAsync() > 0 && await button.IsVisibleAsync())
+            try
             {
-                await button.ClickAsync();
-                return;
+                var button = page.Locator(selector).First;
+                if (await button.CountAsync() > 0 && await button.IsVisibleAsync())
+                {
+                    await button.ClickAsync(new LocatorClickOptions { Timeout = 2_000 });
+                    return;
+                }
+            }
+            catch (PlaywrightException exception)
+            {
+                _logger.LogDebug(
+                    exception,
+                    "Could not expand LinkedIn job description using selector {Selector}",
+                    selector);
             }
         }
     }
