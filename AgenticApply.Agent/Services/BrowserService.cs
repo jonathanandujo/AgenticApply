@@ -178,9 +178,9 @@ public class BrowserService
                     searchUrl);
                 var (easyApply, applyAvailable) =
                     await DetectApplyButtonsAsync(page);
-                var description = await ReadJobDescriptionAsync(
-                    page,
-                    cancellationToken);
+                var description = string.IsNullOrWhiteSpace(existingJob?.Description)
+                    ? await ReadJobDescriptionAsync(page, cancellationToken)
+                    : existingJob.Description;
 
                 var job = new Job
                 {
@@ -494,7 +494,7 @@ public class BrowserService
                             && rect.height > 0;
                     };
                     const labels = [...document.querySelectorAll(
-                        'button, a.jobs-apply-button, a[href*="apply"], [role="button"]')]
+                        '#jobs-apply-button-id, button.jobs-apply-button, a.jobs-apply-button')]
                         .filter(visible)
                         .flatMap(element => [
                             element.innerText,
@@ -504,12 +504,12 @@ public class BrowserService
                         .map(text => (text || '').replace(/\s+/g, ' ').trim())
                         .filter(Boolean);
                     const isEasyApply = labels.some(label =>
-                        /\beasy\s+apply\b/i.test(label));
-                    const isApply = labels.some(label =>
-                        /^\s*apply(?:\b|$)/i.test(label));
+                        /^easy\s+apply(?:\b|$)/i.test(label));
+                    const isRegularApply = labels.some(label =>
+                        /^apply(?:\s|$)/i.test(label));
                     return [
                         ...(isEasyApply ? ['easy'] : []),
-                        ...(isApply || isEasyApply ? ['apply'] : [])
+                        ...(isRegularApply || isEasyApply ? ['apply'] : [])
                     ];
                 }
                 """);

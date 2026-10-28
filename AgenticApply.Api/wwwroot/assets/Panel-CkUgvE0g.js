@@ -1,1 +1,0 @@
-import{x as e}from"./index-DkNDYXvR.js";var t=e();function n({title:e,subtitle:n,action:r,children:i,className:a=``}){return(0,t.jsxs)(`section`,{className:`panel ${a}`,children:[(0,t.jsxs)(`div`,{className:`panel-heading`,children:[(0,t.jsxs)(`div`,{children:[(0,t.jsx)(`h2`,{children:e}),n&&(0,t.jsx)(`p`,{children:n})]}),r]}),i]})}export{n as t};

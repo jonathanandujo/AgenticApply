@@ -99,6 +99,32 @@ public class DatabaseInitializer
         }
 
         command.CommandText =
+            """
+            SELECT COUNT(*)
+            FROM AgentSettings
+            WHERE SettingKey = 'ApplyDetectionV2'
+            """;
+
+        var applyDetectionMigrationApplied =
+            Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
+
+        if (!applyDetectionMigrationApplied)
+        {
+            command.CommandText =
+                """
+                UPDATE Jobs
+                SET EasyApply = 0, ApplyAvailable = NULL;
+
+                INSERT INTO AgentSettings (SettingKey, SettingValue, UpdatedAt)
+                VALUES ('ApplyDetectionV2', 'true', $updatedAt);
+                """;
+            command.Parameters.AddWithValue(
+                "$updatedAt",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        command.CommandText =
         """
         SELECT COUNT(*)
         FROM pragma_table_info('Evaluations')

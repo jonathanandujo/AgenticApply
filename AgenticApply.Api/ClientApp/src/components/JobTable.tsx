@@ -111,11 +111,11 @@ function JobTableRow({ job, showAll }: { job: Job; showAll: boolean }) {
       {showAll && (
         <td>
           <span className="table-muted">
-            {job.easyApply
+            {job.applyAvailable === null
+              ? 'Unknown'
+              : job.easyApply
               ? 'Easy Apply'
-              : job.applyAvailable === null
-                ? 'Unknown'
-                : job.applyAvailable
+              : job.applyAvailable
                 ? 'External Apply'
                 : 'No'}
           </span>

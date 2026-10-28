@@ -171,8 +171,8 @@ export function JobDetailsPage() {
           </Panel>
           <Panel title="Quick facts" subtitle="A few more details.">
             <div className="quick-facts">
-              <div><span>Easy Apply</span><strong>{job.easyApply ? 'Available' : 'Not available'}</strong></div>
-              <div><span>Apply button</span><strong>{job.applyAvailable === null ? 'Not detected' : job.applyAvailable ? 'Available' : 'Not available'}</strong></div>
+              <div><span>Easy Apply</span><strong>{job.applyAvailable === null ? 'Not checked' : job.easyApply ? 'Available' : 'Not available'}</strong></div>
+              <div><span>Apply button</span><strong>{job.applyAvailable === null ? 'Not checked' : job.applyAvailable ? 'Available' : 'Not available'}</strong></div>
               <div><span>Job ID</span><strong className="job-id">{job.jobId}</strong></div>
             </div>
           </Panel>
