@@ -62,10 +62,13 @@ builder.Services.AddSingleton(
 builder.Services.AddSingleton(
     new EvaluationRepository(sqliteConnectionString.ConnectionString));
 builder.Services.AddSingleton(
+    new ApplicationRepository(sqliteConnectionString.ConnectionString));
+builder.Services.AddSingleton(
     new AgentSettingsRepository(sqliteConnectionString.ConnectionString));
 builder.Services.AddSingleton(
     new DatabaseInitializer(sqliteConnectionString.ConnectionString));
 builder.Services.AddScoped<IJobQueryService, JobQueryService>();
+builder.Services.AddScoped<IApplicationService, ApplicationService>();
 builder.Services.AddScoped<IJobReevaluationService, JobReevaluationService>();
 builder.Services.AddScoped<ILinkedInSettingsService, LinkedInSettingsService>();
 builder.Services.AddScoped<IOllamaSettingsService, OllamaSettingsService>();
@@ -119,6 +122,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapJobEndpoints();
+app.MapApplicationEndpoints();
 app.MapLinkedInSettingsEndpoints();
 app.MapOllamaSettingsEndpoints();
 app.MapAgentEndpoints();

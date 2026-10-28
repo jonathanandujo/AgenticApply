@@ -6,6 +6,7 @@ import {
   getOllamaSettings,
   getStats,
   getTopJobs,
+  markJobApplied,
   requestAgentScan,
   reevaluateJob,
   updateLinkedInSearchUrl,
@@ -92,6 +93,20 @@ export function useReevaluateJob(jobId: string) {
 
   return useMutation({
     mutationFn: (model?: string) => reevaluateJob(jobId, model),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+        queryClient.invalidateQueries({ queryKey: ['stats'] }),
+      ])
+    },
+  })
+}
+
+export function useMarkJobApplied(jobId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => markJobApplied(jobId),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['jobs'] }),

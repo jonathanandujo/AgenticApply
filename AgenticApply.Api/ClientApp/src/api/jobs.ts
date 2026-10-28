@@ -36,6 +36,15 @@ export async function reevaluateJob(
   return data
 }
 
+export async function markJobApplied(
+  jobId: string,
+): Promise<{ applied: boolean }> {
+  const { data } = await apiClient.post<{ applied: boolean }>(
+    `/jobs/${encodeURIComponent(jobId)}/application`,
+  )
+  return data
+}
+
 export async function getStats(signal?: AbortSignal): Promise<Stats> {
   const { data } = await apiClient.get<Stats>('/stats', { signal })
   return data

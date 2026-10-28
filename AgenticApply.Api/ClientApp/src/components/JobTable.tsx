@@ -1,7 +1,7 @@
-import { ArrowDown, ArrowUp, ExternalLink, RefreshCw } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, ExternalLink, RefreshCw } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useReevaluateJob } from '../hooks/useJobs'
+import { useMarkJobApplied, useReevaluateJob } from '../hooks/useJobs'
 import type { Job } from '../types/api'
 import { EmptyState } from './QueryState'
 import { ScoreBadge } from './ScoreBadge'
@@ -61,7 +61,7 @@ export function JobTable({ jobs, showAll = false }: JobTableProps) {
                 {sortDirection === 'desc' ? <ArrowDown size={14} /> : <ArrowUp size={14} />}
               </button>
             </th>
-            <th scope="col">Apply</th>
+            <th scope="col">Recommendation</th>
             <th scope="col">Company</th>
             <th scope="col">Title</th>
             <th scope="col">Location</th>
@@ -81,6 +81,7 @@ export function JobTable({ jobs, showAll = false }: JobTableProps) {
 
 function JobTableRow({ job, showAll }: { job: Job; showAll: boolean }) {
   const reevaluateMutation = useReevaluateJob(job.jobId)
+  const applyMutation = useMarkJobApplied(job.jobId)
 
   return (
     <tr>
@@ -140,13 +141,38 @@ function JobTableRow({ job, showAll }: { job: Job; showAll: boolean }) {
               className={reevaluateMutation.isPending ? 'spin' : ''}
             />
           </button>
-          <Link
-            className="row-action"
-            to={`/jobs/${encodeURIComponent(job.jobId)}`}
-            aria-label={`View ${job.title}`}
-          >
-            <ExternalLink size={15} />
-          </Link>
+          {job.url && (
+            <a
+              className="row-action"
+              href={job.url}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`Open ${job.title} on LinkedIn to apply`}
+              title="Open job on LinkedIn"
+            >
+              <ExternalLink size={15} />
+            </a>
+          )}
+          {job.applied ? (
+            <span className="row-action applied-action" title="Marked as applied">
+              <Check size={15} />
+            </span>
+          ) : (
+            <button
+              className="row-action"
+              type="button"
+              aria-label={`Mark ${job.title} as applied`}
+              title={
+                applyMutation.isError
+                  ? `Could not mark as applied: ${applyMutation.error.message}`
+                  : 'Mark as applied after submitting on LinkedIn'
+              }
+              disabled={applyMutation.isPending}
+              onClick={() => applyMutation.mutate()}
+            >
+              <Check size={15} />
+            </button>
+          )}
         </div>
       </td>
     </tr>

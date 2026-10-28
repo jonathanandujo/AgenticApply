@@ -13,6 +13,7 @@ export interface Job {
   description: string
   easyApply: boolean
   applyAvailable: boolean | null
+  applied: boolean
   url: string
   evaluation: Evaluation | null
   createdAt?: string
@@ -28,7 +29,7 @@ export interface Stats {
   evaluatedJobs: number
   recommendedToApply: number
   averageScore: number | null
-  appliedJobs?: number
+  appliedJobs: number
   lastExecution?: string | null
   jobsDiscoveredByDay?: DailyDiscovery[]
 }

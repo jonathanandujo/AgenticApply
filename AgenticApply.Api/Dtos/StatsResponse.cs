@@ -5,4 +5,5 @@ public sealed record StatsResponse(
     int TotalJobs,
     int EvaluatedJobs,
     int RecommendedToApply,
-    decimal? AverageScore);
+    decimal? AverageScore,
+    int AppliedJobs);

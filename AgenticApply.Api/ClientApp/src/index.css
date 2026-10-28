@@ -278,6 +278,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .job-description { padding: 17px; color: #b4b8c3; font-size: 11px; line-height: 1.85; white-space: pre-wrap; overflow-wrap: anywhere; }
 .description-empty { padding: 24px 17px; color: #858c9a; font-size: 10px; }
 .detail-side-stack { display: grid; gap: 13px; }
+.application-actions { display: grid; gap: 9px; padding: 0 12px 12px; }
+.application-actions > .button { justify-content: center; }
+.application-status { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; border: 1px solid #294b3b; border-radius: 7px; color: #8edab1; background: #19271f; font-size: 9px; }
+.applied-action { color: #8edab1; }
 .evaluation-score-row { display: flex; align-items: center; justify-content: space-between; padding: 2px 15px 14px; }
 .detail-score-label { display: block; margin-bottom: 6px; color: #747c8a; font-size: 8px; font-weight: 700; letter-spacing: .75px; }
 .detail-score { display: block; color: #f0eff7; font-size: 28px; font-weight: 650; letter-spacing: -1px; }

@@ -9,5 +9,6 @@ public sealed record JobResponse(
     string Description,
     bool EasyApply,
     bool? ApplyAvailable,
+    bool Applied,
     string Url,
     EvaluationResponse? Evaluation);

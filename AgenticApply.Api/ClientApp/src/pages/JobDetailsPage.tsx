@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   ArrowUpRight,
   BriefcaseBusiness,
+  Check,
   MapPin,
   RefreshCw,
   Sparkles,
@@ -11,7 +12,12 @@ import { Panel } from '../components/Panel'
 import { ErrorState, LoadingState } from '../components/QueryState'
 import { ScoreBadge } from '../components/ScoreBadge'
 import { StatusBadge } from '../components/StatusBadge'
-import { useJob, useOllamaSettings, useReevaluateJob } from '../hooks/useJobs'
+import {
+  useJob,
+  useMarkJobApplied,
+  useOllamaSettings,
+  useReevaluateJob,
+} from '../hooks/useJobs'
 import { useState } from 'react'
 
 export function JobDetailsPage() {
@@ -19,6 +25,7 @@ export function JobDetailsPage() {
   const query = useJob(jobId)
   const ollamaQuery = useOllamaSettings()
   const reevaluateMutation = useReevaluateJob(jobId)
+  const applyMutation = useMarkJobApplied(jobId)
   const [model, setModel] = useState('')
 
   if (query.isLoading) return <LoadingState label="Loading job details…" />
@@ -55,7 +62,8 @@ export function JobDetailsPage() {
           target="_blank"
           rel="noreferrer"
         >
-          Open LinkedIn <ArrowUpRight size={16} />
+          {job.easyApply ? 'Easy Apply on LinkedIn' : 'Open LinkedIn'}
+          <ArrowUpRight size={16} />
         </a>
       </div>
 
@@ -74,6 +82,35 @@ export function JobDetailsPage() {
           )}
         </Panel>
         <div className="detail-side-stack">
+          <Panel title="Application" subtitle="Track your application after submitting.">
+            <div className="application-actions">
+              {job.applied ? (
+                <div className="application-status" role="status">
+                  <Check size={15} />
+                  Marked as applied
+                </div>
+              ) : (
+                <button
+                  className="button button-secondary"
+                  type="button"
+                  disabled={applyMutation.isPending}
+                  onClick={() => applyMutation.mutate()}
+                >
+                  <Check size={15} />
+                  {applyMutation.isPending ? 'Saving…' : 'Mark as applied'}
+                </button>
+              )}
+              {applyMutation.isError && (
+                <p className="linkedin-settings-error" role="alert">
+                  Could not save application status: {applyMutation.error.message}
+                </p>
+              )}
+              <p className="model-input-hint">
+                Complete the application on LinkedIn, then mark it here to update
+                your dashboard.
+              </p>
+            </div>
+          </Panel>
           <Panel title="AI evaluation" subtitle="Your agent’s assessment.">
             <form
               className="reevaluate-form"
