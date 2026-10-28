@@ -6,7 +6,9 @@ public interface IJobQueryService
 {
     Task<IReadOnlyList<JobResponse>> GetAllAsync(CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<JobResponse>> GetTopAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<JobResponse>> GetTopAsync(
+        bool easyApplyOnly,
+        CancellationToken cancellationToken);
 
     Task<JobResponse?> GetByIdAsync(
         string jobId,

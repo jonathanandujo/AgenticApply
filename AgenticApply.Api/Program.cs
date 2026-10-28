@@ -19,8 +19,8 @@ builder.Services
         options => options.ScanIntervalMinutes > 0,
         "Agent:ScanIntervalMinutes must be greater than zero.")
     .Validate(
-        options => options.MaxNewJobsPerScan is >= 2 and <= 5,
-        "Agent:MaxNewJobsPerScan must be between 2 and 5.")
+        options => options.MaxNewJobsPerScan is >= 2 and <= 10,
+        "Agent:MaxNewJobsPerScan must be between 2 and 10.")
     .ValidateOnStart();
 
 var allowedOrigins =

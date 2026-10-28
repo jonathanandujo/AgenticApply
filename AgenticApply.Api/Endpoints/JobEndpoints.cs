@@ -24,13 +24,16 @@ public static class JobEndpoints
         app.MapGet(
                 "/jobs/top",
                 async Task<Ok<IReadOnlyList<JobResponse>>> (
+                    [FromQuery] bool? easyApplyOnly,
                     IJobQueryService service,
                     CancellationToken cancellationToken) =>
                     TypedResults.Ok(
-                        await service.GetTopAsync(cancellationToken)))
+                        await service.GetTopAsync(
+                            easyApplyOnly ?? false,
+                            cancellationToken)))
             .WithName("GetTopJobs")
             .WithSummary("Get the top 10 evaluated jobs")
-            .WithDescription("Returns evaluated jobs ordered by score, highest first.")
+            .WithDescription("Returns up to 10 evaluated jobs ordered by score, highest first. Set easyApplyOnly to true to return only LinkedIn Easy Apply jobs.")
             .Produces<IReadOnlyList<JobResponse>>(StatusCodes.Status200OK);
 
         app.MapGet(

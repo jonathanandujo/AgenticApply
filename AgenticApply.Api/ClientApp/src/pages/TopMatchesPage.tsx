@@ -1,4 +1,5 @@
 import { Sparkles } from 'lucide-react'
+import { useState } from 'react'
 import { JobTable } from '../components/JobTable'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
@@ -6,7 +7,8 @@ import { ErrorState, LoadingState } from '../components/QueryState'
 import { useTopJobs } from '../hooks/useJobs'
 
 export function TopMatchesPage() {
-  const query = useTopJobs()
+  const [easyApplyOnly, setEasyApplyOnly] = useState(false)
+  const query = useTopJobs(easyApplyOnly)
 
   return (
     <div className="page-stack">
@@ -27,9 +29,19 @@ export function TopMatchesPage() {
       ) : (
         <Panel
           title="Best-fit opportunities"
-          subtitle={`${query.data?.length ?? 0} evaluated matches · Sorted by score`}
+          subtitle={`${query.data?.length ?? 0} ${easyApplyOnly ? 'Easy Apply ' : ''}evaluated matches · Sorted by score`}
           className="table-panel"
         >
+          <div className="table-toolbar">
+            <label className="easy-apply-filter">
+              <input
+                type="checkbox"
+                checked={easyApplyOnly}
+                onChange={(event) => setEasyApplyOnly(event.target.checked)}
+              />
+              <span>Easy Apply only</span>
+            </label>
+          </div>
           <JobTable jobs={query.data ?? []} />
         </Panel>
       )}

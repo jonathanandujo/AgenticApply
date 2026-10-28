@@ -20,10 +20,10 @@ export function useJobs() {
   })
 }
 
-export function useTopJobs() {
+export function useTopJobs(easyApplyOnly = false) {
   return useQuery({
-    queryKey: ['jobs', 'top'],
-    queryFn: ({ signal }) => getTopJobs(signal),
+    queryKey: ['jobs', 'top', { easyApplyOnly }],
+    queryFn: ({ signal }) => getTopJobs(easyApplyOnly, signal),
   })
 }
 

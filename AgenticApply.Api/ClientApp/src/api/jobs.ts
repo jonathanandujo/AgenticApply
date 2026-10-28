@@ -11,8 +11,14 @@ export async function getJobs(signal?: AbortSignal): Promise<Job[]> {
   return data
 }
 
-export async function getTopJobs(signal?: AbortSignal): Promise<Job[]> {
-  const { data } = await apiClient.get<Job[]>('/jobs/top', { signal })
+export async function getTopJobs(
+  easyApplyOnly = false,
+  signal?: AbortSignal,
+): Promise<Job[]> {
+  const { data } = await apiClient.get<Job[]>('/jobs/top', {
+    params: easyApplyOnly ? { easyApplyOnly: true } : undefined,
+    signal,
+  })
   return data
 }
 

@@ -26,6 +26,7 @@ public sealed class JobQueryService(
     }
 
     public async Task<IReadOnlyList<JobResponse>> GetTopAsync(
+        bool easyApplyOnly,
         CancellationToken cancellationToken)
     {
         var (jobs, evaluations, appliedJobIds) =
@@ -33,6 +34,7 @@ public sealed class JobQueryService(
 
         return jobs
             .Where(job => evaluations.ContainsKey(job.JobId))
+            .Where(job => !easyApplyOnly || job.EasyApply)
             .OrderByDescending(job => evaluations[job.JobId].Score)
             .ThenBy(job => job.Title, StringComparer.OrdinalIgnoreCase)
             .ThenBy(job => job.JobId, StringComparer.Ordinal)

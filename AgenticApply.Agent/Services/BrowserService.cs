@@ -89,11 +89,11 @@ public class BrowserService
         string? jobsUrl = null,
         int maxNewJobs = 3)
     {
-        if (maxNewJobs is < 2 or > 5)
+        if (maxNewJobs is < 2 or > 10)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(maxNewJobs),
-                "The per-scan new job limit must be between 2 and 5.");
+                "The per-scan new job limit must be between 2 and 10.");
         }
 
         var jobs = new List<Job>();
