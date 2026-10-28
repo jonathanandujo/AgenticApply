@@ -1,7 +1,18 @@
-import { ArrowDown, ArrowUp, Check, ExternalLink, RefreshCw } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  ExternalLink,
+  RefreshCw,
+  Send,
+} from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useMarkJobApplied, useReevaluateJob } from '../hooks/useJobs'
+import {
+  useAutoApplyToJob,
+  useMarkJobApplied,
+  useReevaluateJob,
+} from '../hooks/useJobs'
 import type { Job } from '../types/api'
 import { EmptyState } from './QueryState'
 import { ScoreBadge } from './ScoreBadge'
@@ -82,6 +93,7 @@ export function JobTable({ jobs, showAll = false }: JobTableProps) {
 function JobTableRow({ job, showAll }: { job: Job; showAll: boolean }) {
   const reevaluateMutation = useReevaluateJob(job.jobId)
   const applyMutation = useMarkJobApplied(job.jobId)
+  const autoApplyMutation = useAutoApplyToJob(job.jobId)
 
   return (
     <tr>
@@ -158,22 +170,64 @@ function JobTableRow({ job, showAll }: { job: Job; showAll: boolean }) {
               <Check size={15} />
             </span>
           ) : (
-            <button
-              className="row-action"
-              type="button"
-              aria-label={`Mark ${job.title} as applied`}
-              title={
-                applyMutation.isError
-                  ? `Could not mark as applied: ${applyMutation.error.message}`
-                  : 'Mark as applied after submitting on LinkedIn'
-              }
-              disabled={applyMutation.isPending}
-              onClick={() => applyMutation.mutate()}
-            >
-              <Check size={15} />
-            </button>
+            <>
+              {job.easyApply && (
+                <button
+                  className="row-action auto-apply-action"
+                  type="button"
+                  aria-label={`Automatically apply to ${job.title} with LinkedIn Easy Apply`}
+                  title={
+                    autoApplyMutation.isPending
+                      ? 'Completing LinkedIn Easy Apply…'
+                      : 'Auto apply using LinkedIn Easy Apply'
+                  }
+                  disabled={
+                    autoApplyMutation.isPending
+                    || applyMutation.isPending
+                  }
+                  onClick={() => {
+                    const confirmed = window.confirm(
+                      `Submit an Easy Apply application for ${job.title} at ${job.company}? AgenticApply will use your signed-in LinkedIn session, proceed through the form, and submit it. It will stop if required answers are missing.`,
+                    )
+                    if (confirmed) autoApplyMutation.mutate()
+                  }}
+                >
+                  <Send
+                    size={14}
+                    className={autoApplyMutation.isPending ? 'spin' : ''}
+                  />
+                </button>
+              )}
+              <button
+                className="row-action"
+                type="button"
+                aria-label={`Mark ${job.title} as applied`}
+                title={
+                  applyMutation.isError
+                    ? `Could not mark as applied: ${applyMutation.error.message}`
+                    : 'Mark as applied after submitting on LinkedIn'
+                }
+                disabled={
+                  applyMutation.isPending
+                  || autoApplyMutation.isPending
+                }
+                onClick={() => applyMutation.mutate()}
+              >
+                <Check size={15} />
+              </button>
+            </>
           )}
         </div>
+        {autoApplyMutation.data && !autoApplyMutation.data.applied && (
+          <div className="auto-apply-feedback" role="status">
+            {autoApplyMutation.data.message}
+          </div>
+        )}
+        {autoApplyMutation.isError && (
+          <div className="auto-apply-feedback auto-apply-error" role="alert">
+            {autoApplyMutation.error.message}
+          </div>
+        )}
       </td>
     </tr>
   )

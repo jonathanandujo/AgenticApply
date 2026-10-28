@@ -6,6 +6,7 @@ import {
   getOllamaSettings,
   getStats,
   getTopJobs,
+  autoApplyToJob,
   markJobApplied,
   requestAgentScan,
   reevaluateJob,
@@ -107,6 +108,20 @@ export function useMarkJobApplied(jobId: string) {
 
   return useMutation({
     mutationFn: () => markJobApplied(jobId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+        queryClient.invalidateQueries({ queryKey: ['stats'] }),
+      ])
+    },
+  })
+}
+
+export function useAutoApplyToJob(jobId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => autoApplyToJob(jobId),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['jobs'] }),

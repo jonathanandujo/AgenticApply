@@ -5,8 +5,11 @@ React dashboard and a background worker in one process. The worker scans a
 LinkedIn jobs search, stores jobs in SQLite, and evaluates jobs without an
 evaluation using a local Ollama model.
 
-Applications are not submitted automatically. Use LinkedIn to submit an
-application, then mark the job as applied in AgenticApply.
+Applications are never submitted without an explicit user action. You can apply
+manually on LinkedIn and track the result, or explicitly start Auto Apply for a
+job identified as Easy Apply. Review the confirmation before proceeding;
+automation stops when required answers are missing and records success only
+after LinkedIn confirms submission.
 
 ## Prerequisites
 
@@ -165,6 +168,10 @@ and only requires the `dotnet run` command above.
 - **Top Matches** and **Jobs** show discovered opportunities and scores.
 - Open a job to review its description and evaluation, choose an Ollama model
   for re-evaluation, or open the listing on LinkedIn.
+- For jobs identified as Easy Apply, use the row's Auto Apply action to start
+  LinkedIn's application flow after confirming. The automation does not invent
+  screening answers; it stops for unanswered fields and does not mark the job
+  as applied unless LinkedIn confirms submission.
 - After submitting an application on LinkedIn, mark the job as applied in the
   dashboard. This updates the SQLite application tracker; it does not submit
   the application itself.

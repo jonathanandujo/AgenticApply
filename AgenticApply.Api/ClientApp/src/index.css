@@ -284,6 +284,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .application-actions > .button { justify-content: center; }
 .application-status { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; border: 1px solid #294b3b; border-radius: 7px; color: #8edab1; background: #19271f; font-size: 9px; }
 .applied-action { color: #8edab1; }
+.auto-apply-action { color: #b6a1ff; }
+.auto-apply-feedback { margin-top: 5px; color: #d7c58e; font-size: 8px; line-height: 1.4; }
+.auto-apply-error { color: #eea0a0; }
 .evaluation-score-row { display: flex; align-items: center; justify-content: space-between; padding: 2px 15px 14px; }
 .detail-score-label { display: block; margin-bottom: 6px; color: #747c8a; font-size: 8px; font-weight: 700; letter-spacing: .75px; }
 .detail-score { display: block; color: #f0eff7; font-size: 28px; font-weight: 650; letter-spacing: -1px; }

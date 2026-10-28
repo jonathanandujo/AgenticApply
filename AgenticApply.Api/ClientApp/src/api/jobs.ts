@@ -51,6 +51,21 @@ export async function markJobApplied(
   return data
 }
 
+export async function autoApplyToJob(
+  jobId: string,
+): Promise<{ status: string; message: string; applied: boolean }> {
+  const { data } = await apiClient.post<{
+    status: string
+    message: string
+    applied: boolean
+  }>(
+    `/jobs/${encodeURIComponent(jobId)}/auto-apply`,
+    { confirmSubmission: true },
+    { timeout: 600_000 },
+  )
+  return data
+}
+
 export async function getStats(signal?: AbortSignal): Promise<Stats> {
   const { data } = await apiClient.get<Stats>('/stats', { signal })
   return data

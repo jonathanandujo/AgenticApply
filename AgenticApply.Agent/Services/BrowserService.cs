@@ -3,12 +3,14 @@ using AgenticApply.Agent.Data;
 using Microsoft.Playwright;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Text.RegularExpressions;
 
 namespace AgenticApply.Agent.Services;
 
 public class BrowserService
 {
     private const int MaximumJobsPerScan = 200;
+    private static readonly SemaphoreSlim BrowserSessionLock = new(1, 1);
 
     private readonly JobRepository _jobRepository;
     private readonly ILogger<BrowserService> _logger;
@@ -95,6 +97,9 @@ public class BrowserService
                 nameof(maxNewJobs),
                 "The per-scan new job limit must be between 2 and 10.");
         }
+
+        using var browserSession = await AcquireBrowserSessionAsync(
+            cancellationToken);
 
         var jobs = new List<Job>();
         var newJobsProcessed = 0;
@@ -257,6 +262,290 @@ public class BrowserService
         }
 
         return jobs;
+    }
+
+    public async Task<EasyApplyAttemptResult> ApplyEasyApplyAsync(
+        string jobId,
+        CancellationToken cancellationToken = default)
+    {
+        using var browserSession = await AcquireBrowserSessionAsync(
+            cancellationToken);
+
+        var job = await _jobRepository.GetAsync(jobId, cancellationToken);
+        if (job is null)
+        {
+            return new(
+                EasyApplyAttemptStatus.NotFound,
+                "The job is not present in the database.");
+        }
+
+        if (!job.EasyApply)
+        {
+            return new(
+                EasyApplyAttemptStatus.NotEasyApply,
+                "LinkedIn does not identify this job as Easy Apply.");
+        }
+
+        if (!Uri.TryCreate(job.Url, UriKind.Absolute, out var jobUri)
+            || !IsLinkedInJobUrl(jobUri))
+        {
+            return new(
+                EasyApplyAttemptStatus.NotEasyApply,
+                "The saved job URL is not a valid LinkedIn job listing.");
+        }
+
+        using var playwright = await Playwright.CreateAsync();
+        await using var context =
+            await playwright.Chromium.LaunchPersistentContextAsync(
+                "BrowserData",
+                new BrowserTypeLaunchPersistentContextOptions
+                {
+                    Channel = "msedge",
+                    Headless = false
+                });
+
+        var page =
+            context.Pages.FirstOrDefault()
+            ?? await context.NewPageAsync();
+        await page.GotoAsync(
+            jobUri.AbsoluteUri,
+            new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.DOMContentLoaded,
+                Timeout = 30_000
+            });
+        await WaitForAuthenticationIfRequiredAsync(
+            page,
+            cancellationToken,
+            jobUri.AbsoluteUri);
+
+        var applyButton = await FindEasyApplyButtonAsync(page);
+        if (applyButton is null)
+        {
+            return new(
+                EasyApplyAttemptStatus.NotEasyApply,
+                "LinkedIn's job page does not show an Easy Apply button.");
+        }
+
+        await applyButton.ClickAsync();
+        var dialog = page.Locator("[role='dialog']").Last;
+        try
+        {
+            await dialog.WaitForAsync(
+                new LocatorWaitForOptions
+                {
+                    State = WaitForSelectorState.Visible,
+                    Timeout = 10_000
+                });
+        }
+        catch (TimeoutException)
+        {
+            return new(
+                EasyApplyAttemptStatus.NeedsManualInput,
+                "LinkedIn did not open the Easy Apply form. Complete the application manually.");
+        }
+
+        for (var step = 0; step < 12; step++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var dialogText = await dialog.InnerTextAsync();
+            if (IsApplicationSubmitted(dialogText))
+            {
+                return new(
+                    EasyApplyAttemptStatus.Submitted,
+                    "LinkedIn confirmed that the application was submitted.");
+            }
+
+            var buttons = await dialog.Locator("button").AllAsync();
+            ILocator? submitButton = null;
+            ILocator? continueButton = null;
+
+            foreach (var button in buttons)
+            {
+                if (!await button.IsVisibleAsync() || !await button.IsEnabledAsync())
+                {
+                    continue;
+                }
+
+                var label = await GetButtonLabelAsync(button);
+                if (Regex.IsMatch(
+                        label,
+                        @"^submit\s+application\b",
+                        RegexOptions.IgnoreCase))
+                {
+                    submitButton = button;
+                    break;
+                }
+
+                if (Regex.IsMatch(
+                        label,
+                        @"^(next|continue|review)(?:\b|$)",
+                        RegexOptions.IgnoreCase))
+                {
+                    continueButton ??= button;
+                }
+            }
+
+            if (submitButton is not null)
+            {
+                if (await HasInvalidRequiredFieldsAsync(dialog))
+                {
+                    return new(
+                        EasyApplyAttemptStatus.NeedsManualInput,
+                        "The application has unanswered required fields. No answers were invented and nothing was submitted. Reopen the job on LinkedIn to complete it manually.");
+                }
+
+                await submitButton.ClickAsync();
+                if (await WaitForSubmissionConfirmationAsync(
+                        page,
+                        dialog,
+                        cancellationToken))
+                {
+                    return new(
+                        EasyApplyAttemptStatus.Submitted,
+                        "LinkedIn confirmed that the application was submitted.");
+                }
+
+                return new(
+                    EasyApplyAttemptStatus.SubmissionUnconfirmed,
+                    "The submit action was clicked, but LinkedIn did not show a submission confirmation. Check LinkedIn before retrying.");
+            }
+
+            if (continueButton is null)
+            {
+                return new(
+                    EasyApplyAttemptStatus.NeedsManualInput,
+                    "The application needs a step AgenticApply cannot complete. Nothing was submitted; reopen the job on LinkedIn to continue manually.");
+            }
+
+            if (await HasInvalidRequiredFieldsAsync(dialog))
+            {
+                return new(
+                    EasyApplyAttemptStatus.NeedsManualInput,
+                    "The application has unanswered required fields. No answers were invented and nothing was submitted. Reopen the job on LinkedIn to complete it manually.");
+            }
+
+            var previousText = dialogText;
+            await continueButton.ClickAsync();
+            await page.WaitForTimeoutAsync(800);
+
+            if (!await dialog.IsVisibleAsync())
+            {
+                return new(
+                    EasyApplyAttemptStatus.SubmissionUnconfirmed,
+                    "The Easy Apply dialog closed before LinkedIn confirmed submission. Check LinkedIn before retrying.");
+            }
+
+            var currentText = await dialog.InnerTextAsync();
+            if (string.Equals(
+                    previousText,
+                    currentText,
+                    StringComparison.Ordinal))
+            {
+                return new(
+                    EasyApplyAttemptStatus.NeedsManualInput,
+                    "LinkedIn did not advance to the next step. Nothing was submitted; reopen the job on LinkedIn to review and continue manually.");
+            }
+        }
+
+        return new(
+            EasyApplyAttemptStatus.NeedsManualInput,
+            "The application has more steps than the automation supports. Nothing was submitted; reopen the job on LinkedIn to continue manually.");
+    }
+
+    private static async Task<IDisposable> AcquireBrowserSessionAsync(
+        CancellationToken cancellationToken)
+    {
+        await BrowserSessionLock.WaitAsync(cancellationToken);
+        return new BrowserSessionLease(BrowserSessionLock);
+    }
+
+    private static async Task<ILocator?> FindEasyApplyButtonAsync(IPage page)
+    {
+        var selectors = new[]
+        {
+            "#jobs-apply-button-id",
+            "button.jobs-apply-button"
+        };
+
+        foreach (var selector in selectors)
+        {
+            var locator = page.Locator(selector).First;
+            if (await locator.CountAsync() == 0
+                || !await locator.IsVisibleAsync())
+            {
+                continue;
+            }
+
+            var label = await GetButtonLabelAsync(locator);
+            if (Regex.IsMatch(
+                    label,
+                    @"\beasy\s+apply\b",
+                    RegexOptions.IgnoreCase))
+            {
+                return locator;
+            }
+        }
+
+        return null;
+    }
+
+    private static async Task<string> GetButtonLabelAsync(ILocator button)
+    {
+        var ariaLabel = await button.GetAttributeAsync("aria-label");
+        var text = await button.InnerTextAsync();
+        return string.Join(
+            " ",
+            new[] { ariaLabel, text }
+                .Where(label => !string.IsNullOrWhiteSpace(label)));
+    }
+
+    private static async Task<bool> HasInvalidRequiredFieldsAsync(ILocator dialog) =>
+        await dialog.Locator(
+                "input:invalid, select:invalid, textarea:invalid, [aria-invalid='true']")
+            .CountAsync() > 0;
+
+    private static async Task<bool> WaitForSubmissionConfirmationAsync(
+        IPage page,
+        ILocator dialog,
+        CancellationToken cancellationToken)
+    {
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(20);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (await dialog.IsVisibleAsync())
+            {
+                var dialogText = await dialog.InnerTextAsync();
+                if (IsApplicationSubmitted(dialogText))
+                {
+                    return true;
+                }
+            }
+
+            var pageText = await page.Locator("body").InnerTextAsync();
+            if (IsApplicationSubmitted(pageText))
+            {
+                return true;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+        }
+
+        return false;
+    }
+
+    private static bool IsApplicationSubmitted(string text) =>
+        Regex.IsMatch(
+            text,
+            @"(?:application\s+(?:was\s+)?sent|application\s+submitted|your\s+application\s+has\s+been\s+sent)",
+            RegexOptions.IgnoreCase);
+
+    private sealed class BrowserSessionLease(SemaphoreSlim semaphore) : IDisposable
+    {
+        public void Dispose() => semaphore.Release();
     }
 
     private async Task SelectJobListingAsync(
