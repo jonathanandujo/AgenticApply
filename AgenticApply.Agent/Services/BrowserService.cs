@@ -259,17 +259,23 @@ public class BrowserService
     {
         var selectors = new[]
         {
-            ".jobs-description__content",
             ".jobs-description-content__text",
             ".jobs-box__html-content",
+            ".jobs-description__content",
             "#job-details",
             ".jobs-description",
             "[class*='jobs-description']"
         };
 
-        for (var attempt = 0; attempt < 12; attempt++)
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
+        var previousText = string.Empty;
+        var stableTextReads = 0;
+
+        while (DateTimeOffset.UtcNow < deadline)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            await ExpandJobDescriptionAsync(page);
 
             foreach (var selector in selectors)
             {
@@ -285,7 +291,19 @@ public class BrowserService
                     var text = (await locator.InnerTextAsync()).Trim();
                     if (!string.IsNullOrWhiteSpace(text))
                     {
-                        return text;
+                        if (text.Equals(previousText, StringComparison.Ordinal))
+                        {
+                            stableTextReads++;
+                            if (stableTextReads >= 2)
+                            {
+                                return text;
+                            }
+                        }
+                        else
+                        {
+                            previousText = text;
+                            stableTextReads = 0;
+                        }
                     }
                 }
                 catch (PlaywrightException exception)
@@ -297,10 +315,40 @@ public class BrowserService
                 }
             }
 
-            await page.WaitForTimeoutAsync(500);
+            await Task.Delay(TimeSpan.FromMilliseconds(750), cancellationToken);
         }
 
+        _logger.LogWarning(
+            "Timed out waiting 30 seconds for LinkedIn job description at {CurrentUrl}",
+            page.Url);
+
         return string.Empty;
+    }
+
+    private static async Task ExpandJobDescriptionAsync(IPage page)
+    {
+        var showMoreSelectors = new[]
+        {
+            "button.jobs-description__footer-button",
+            "button:has-text('…see more')",
+            "button:has-text('...see more')",
+            "button:has-text('See more')",
+            "button[aria-label*='See more']",
+            "button:has-text('… more')",
+            "button:has-text('... more')",
+            "button:has-text(' more')",
+            "button[aria-label*=' more']"
+        };
+
+        foreach (var selector in showMoreSelectors)
+        {
+            var button = page.Locator(selector).First;
+            if (await button.CountAsync() > 0 && await button.IsVisibleAsync())
+            {
+                await button.ClickAsync();
+                return;
+            }
+        }
     }
 
     private async Task<bool> DetectEasyApplyAsync(IPage page)
