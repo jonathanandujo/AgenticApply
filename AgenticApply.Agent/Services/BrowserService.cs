@@ -1,16 +1,24 @@
 using AgenticApply.Agent.Models;
 using AgenticApply.Agent.Data;
 using Microsoft.Playwright;
+using Microsoft.Extensions.Logging;
 
 namespace AgenticApply.Agent.Services;
 
 public class BrowserService
 {
-    private readonly JobRepository _jobRepository;
+    private const string LinkedInJobsUrl =
+        "https://www.linkedin.com/jobs/search/?currentJobId=4481802072&distance=25.0&f_AL=true&f_TPR=r86400&f_WT=2&geoId=103323778&keywords=c%23&origin=JOBS_HOME_KEYWORD_HISTORY";
 
-    public BrowserService(JobRepository jobRepository)
+    private readonly JobRepository _jobRepository;
+    private readonly ILogger<BrowserService> _logger;
+
+    public BrowserService(
+        JobRepository jobRepository,
+        ILogger<BrowserService> logger)
     {
         _jobRepository = jobRepository;
+        _logger = logger;
     }
 
     public async Task LoginToLinkedInAsync()
@@ -72,7 +80,9 @@ public class BrowserService
         await page.WaitForTimeoutAsync(5000);
     }
 
-    public async Task<List<Job>> GetJobsAsync(bool persistJobs = true)
+    public async Task<List<Job>> GetJobsAsync(
+        bool persistJobs = true,
+        CancellationToken cancellationToken = default)
     {
         var jobs = new List<Job>();
 
@@ -92,12 +102,13 @@ public class BrowserService
             ?? await context.NewPageAsync();
 
         await page.GotoAsync(
-            "https://www.linkedin.com/jobs/search/?currentJobId=4481802072&distance=25.0&f_AL=true&f_TPR=r86400&f_WT=2&geoId=103323778&keywords=c%23&origin=JOBS_HOME_KEYWORD_HISTORY",
+            LinkedInJobsUrl,
             new PageGotoOptions
             {
                 WaitUntil = WaitUntilState.DOMContentLoaded
             });
 
+        await WaitForAuthenticationIfRequiredAsync(page, cancellationToken);
         await page.WaitForTimeoutAsync(5000);
 
         var cards = page.Locator("div[data-job-id]");
@@ -108,8 +119,12 @@ public class BrowserService
 
         for (int i = 0; i < count; i++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             try
             {
+                await WaitForAuthenticationIfRequiredAsync(page, cancellationToken);
+
                 var card = cards.Nth(i);
 
                 var jobId =
@@ -137,6 +152,7 @@ public class BrowserService
                 await card.ClickAsync();
 
                 await page.WaitForTimeoutAsync(2000);
+                await WaitForAuthenticationIfRequiredAsync(page, cancellationToken);
 
                 var easyApply =
                     await page
@@ -204,12 +220,82 @@ public class BrowserService
                 Console.WriteLine(
                     $"Description Length: {description.Length}");
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error: {ex.Message}");
+                _logger.LogError(
+                    ex,
+                    "Failed to scrape LinkedIn job card at index {JobIndex}",
+                    i);
+
+                await WaitForAuthenticationIfRequiredAsync(page, cancellationToken);
             }
         }
 
         return jobs;
+    }
+
+    private async Task WaitForAuthenticationIfRequiredAsync(
+        IPage page,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsAuthenticationRequiredAsync(page))
+        {
+            return;
+        }
+
+        _logger.LogWarning(
+            "LinkedIn requires authentication. Waiting for manual sign-in in the browser.");
+        Console.WriteLine(
+            "LinkedIn requires authentication. Sign in using the open browser; scraping will resume automatically.");
+
+        while (await IsAuthenticationRequiredAsync(page))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+        }
+
+        _logger.LogInformation(
+            "LinkedIn authentication detected. Resuming the job search.");
+        await page.GotoAsync(
+            LinkedInJobsUrl,
+            new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.DOMContentLoaded
+            });
+    }
+
+    private static async Task<bool> IsAuthenticationRequiredAsync(IPage page)
+    {
+        var currentUrl = page.Url;
+        if (currentUrl.Contains("/login", StringComparison.OrdinalIgnoreCase)
+            || currentUrl.Contains("/checkpoint", StringComparison.OrdinalIgnoreCase)
+            || currentUrl.Contains("/authwall", StringComparison.OrdinalIgnoreCase)
+            || currentUrl.Contains("/challenge", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var loginSelectors = new[]
+        {
+            "#username",
+            "#password",
+            "form.login__form",
+            "input[name='session_key']",
+            "input[name='session_password']"
+        };
+
+        foreach (var selector in loginSelectors)
+        {
+            if (await page.Locator(selector).First.IsVisibleAsync())
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

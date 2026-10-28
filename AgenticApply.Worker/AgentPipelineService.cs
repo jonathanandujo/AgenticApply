@@ -22,7 +22,8 @@ public sealed class AgentPipelineService(
 
         // Scraping persists new jobs in live mode; dry-run returns them without database writes.
         var scannedJobs = await browserService.GetJobsAsync(
-            persistJobs: !_options.DryRun);
+            persistJobs: !_options.DryRun,
+            cancellationToken: cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
 
