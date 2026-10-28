@@ -19,6 +19,18 @@ export async function getJob(jobId: string, signal?: AbortSignal): Promise<Job> 
   return data
 }
 
+export async function reevaluateJob(
+  jobId: string,
+  model?: string,
+): Promise<Job> {
+  const { data } = await apiClient.post<Job>(
+    `/jobs/${encodeURIComponent(jobId)}/reevaluate`,
+    model ? { model } : {},
+    { timeout: 180_000 },
+  )
+  return data
+}
+
 export async function getStats(signal?: AbortSignal): Promise<Stats> {
   const { data } = await apiClient.get<Stats>('/stats', { signal })
   return data

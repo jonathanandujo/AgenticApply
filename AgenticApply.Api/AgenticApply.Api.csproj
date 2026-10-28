@@ -12,6 +12,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AgenticApply.Agent\AgenticApply.Agent.csproj" />
+    <Content Include="..\AgenticApply.Agent\Knowledge\CandidateProfile.md">
+      <Link>Knowledge\CandidateProfile.md</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

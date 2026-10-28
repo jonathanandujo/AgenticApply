@@ -4,7 +4,7 @@ public class CandidateProfileService
 {
     private readonly string _path =
         Path.Combine(
-            Environment.CurrentDirectory,
+            AppContext.BaseDirectory,
             "Knowledge",
             "CandidateProfile.md");
 

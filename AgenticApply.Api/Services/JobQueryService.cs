@@ -98,5 +98,6 @@ public sealed class JobQueryService(
                 : new EvaluationResponse(
                     evaluation.Score,
                     evaluation.Apply,
-                    evaluation.Reason));
+                    evaluation.Reason,
+                    evaluation.Model));
 }

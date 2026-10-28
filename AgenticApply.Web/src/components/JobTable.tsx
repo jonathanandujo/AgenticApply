@@ -1,6 +1,7 @@
-import { ArrowDown, ArrowUp, ExternalLink } from 'lucide-react'
+import { ArrowDown, ArrowUp, ExternalLink, RefreshCw } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useReevaluateJob } from '../hooks/useJobs'
 import type { Job } from '../types/api'
 import { EmptyState } from './QueryState'
 import { ScoreBadge } from './ScoreBadge'
@@ -70,51 +71,78 @@ export function JobTable({ jobs, showAll = false }: JobTableProps) {
         </thead>
         <tbody>
           {sortedJobs.map((job) => (
-            <tr key={job.jobId}>
-              <td>
-                {job.evaluation ? (
-                  <ScoreBadge score={job.evaluation.score} />
-                ) : (
-                  <span className="score-pending">Pending</span>
-                )}
-              </td>
-              <td>
-                {job.evaluation ? (
-                  <StatusBadge apply={job.evaluation.apply} />
-                ) : (
-                  <span className="table-muted">—</span>
-                )}
-              </td>
-              <td className="company-cell">{job.company}</td>
-              <td>
-                <Link
-                  className="job-title-link"
-                  to={`/jobs/${encodeURIComponent(job.jobId)}`}
-                >
-                  {job.title}
-                </Link>
-              </td>
-              <td className="location-cell">{job.location}</td>
-              {showAll && (
-                <td>
-                  <span className="table-muted">
-                    {job.easyApply ? 'Available' : 'No'}
-                  </span>
-                </td>
-              )}
-              <td>
-                <Link
-                  className="row-action"
-                  to={`/jobs/${encodeURIComponent(job.jobId)}`}
-                  aria-label={`View ${job.title}`}
-                >
-                  <ExternalLink size={15} />
-                </Link>
-              </td>
-            </tr>
+            <JobTableRow key={job.jobId} job={job} showAll={showAll} />
           ))}
         </tbody>
       </table>
     </div>
+  )
+}
+
+function JobTableRow({ job, showAll }: { job: Job; showAll: boolean }) {
+  const reevaluateMutation = useReevaluateJob(job.jobId)
+
+  return (
+    <tr>
+      <td>
+        {job.evaluation ? (
+          <ScoreBadge score={job.evaluation.score} />
+        ) : (
+          <span className="score-pending">Pending</span>
+        )}
+      </td>
+      <td>
+        {job.evaluation ? (
+          <StatusBadge apply={job.evaluation.apply} />
+        ) : (
+          <span className="table-muted">—</span>
+        )}
+      </td>
+      <td className="company-cell">{job.company}</td>
+      <td>
+        <Link
+          className="job-title-link"
+          to={`/jobs/${encodeURIComponent(job.jobId)}`}
+        >
+          {job.title}
+        </Link>
+      </td>
+      <td className="location-cell">{job.location}</td>
+      {showAll && (
+        <td>
+          <span className="table-muted">
+            {job.easyApply ? 'Available' : 'No'}
+          </span>
+        </td>
+      )}
+      <td>
+        <div className="row-actions">
+          <button
+            className="row-action"
+            type="button"
+            aria-label={`Re-evaluate ${job.title} with configured model`}
+            title={
+              reevaluateMutation.isError
+                ? `Re-evaluation failed: ${reevaluateMutation.error.message}`
+                : 'Re-evaluate with configured model'
+            }
+            disabled={reevaluateMutation.isPending}
+            onClick={() => reevaluateMutation.mutate(undefined)}
+          >
+            <RefreshCw
+              size={14}
+              className={reevaluateMutation.isPending ? 'spin' : ''}
+            />
+          </button>
+          <Link
+            className="row-action"
+            to={`/jobs/${encodeURIComponent(job.jobId)}`}
+            aria-label={`View ${job.title}`}
+          >
+            <ExternalLink size={15} />
+          </Link>
+        </div>
+      </td>
+    </tr>
   )
 }

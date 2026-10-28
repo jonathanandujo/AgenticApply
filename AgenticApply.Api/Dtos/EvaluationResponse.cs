@@ -4,4 +4,5 @@ namespace AgenticApply.Api.Dtos;
 public sealed record EvaluationResponse(
     int Score,
     bool Apply,
-    string Reason);
+    string Reason,
+    string? Model);

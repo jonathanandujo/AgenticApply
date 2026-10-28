@@ -2,6 +2,7 @@ export interface Evaluation {
   score: number
   apply: boolean
   reason: string
+  model: string | null
 }
 
 export interface Job {

@@ -4,29 +4,31 @@ namespace AgenticApply.Agent.Services;
 
 public static class OllamaLogger
 {
-    private static readonly string LogPath =
-        Path.Combine(
-            Environment.CurrentDirectory,
-            "Logs",
-            "ollama.log");
-
     public static void Log(
-    Job job,
-    string candidateProfile,
-    string prompt,
-    string response)
+        Job job,
+        string candidateProfile,
+        string prompt,
+        string response,
+        string? model = null,
+        string? logPath = null)
     {
+        var resolvedLogPath = string.IsNullOrWhiteSpace(logPath)
+            ? Path.Combine(
+                Environment.CurrentDirectory,
+                "Logs",
+                "ollama.log")
+            : Path.GetFullPath(logPath);
+
         try
         {
-            Console.WriteLine("Entrando al logger...");
-
             Directory.CreateDirectory(
-                Path.GetDirectoryName(LogPath)!);
+                Path.GetDirectoryName(resolvedLogPath)!);
 
             var content = $"""
 
 ==========================================================
 Timestamp: {DateTime.Now:yyyy-MM-dd HH:mm:ss}
+Model: {model ?? "unknown"}
 
 JOB:
 Title: {job.Title}
@@ -43,16 +45,14 @@ RESPONSE:
 {response}
 
 ==========================================================
-
 """;
 
-            File.AppendAllText(LogPath, content);
-
-            Console.WriteLine($"Log escrito en: {LogPath}");
+            File.AppendAllText(resolvedLogPath, content);
         }
         catch (Exception ex)
         {
-            Console.WriteLine(ex);
+            Console.Error.WriteLine(
+                $"Failed to write Ollama log to '{resolvedLogPath}': {ex}");
         }
     }
 }

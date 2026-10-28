@@ -69,6 +69,7 @@ public class EvaluationRepository
             Score,
             Apply,
             Reason,
+            Model,
             CreatedAt
         )
         VALUES
@@ -77,6 +78,7 @@ public class EvaluationRepository
             $score,
             $apply,
             $reason,
+            $model,
             $createdAt
         )
         """;
@@ -96,6 +98,10 @@ public class EvaluationRepository
         command.Parameters.AddWithValue(
             "$reason",
             evaluation.Reason);
+
+        command.Parameters.AddWithValue(
+            "$model",
+            (object?)evaluation.Model ?? DBNull.Value);
 
         command.Parameters.AddWithValue(
             "$createdAt",
@@ -120,7 +126,8 @@ public class EvaluationRepository
         SELECT
             Score,
             Apply,
-            Reason
+            Reason,
+            Model
         FROM Evaluations
         WHERE JobId = $jobId
         """;
@@ -143,7 +150,10 @@ public class EvaluationRepository
             Apply = reader.GetInt32(1) == 1,
             Reason = reader.IsDBNull(2)
                 ? ""
-                : reader.GetString(2)
+                : reader.GetString(2),
+            Model = reader.IsDBNull(3)
+                ? null
+                : reader.GetString(3)
         };
     }
 
@@ -160,7 +170,7 @@ public class EvaluationRepository
         var command = connection.CreateCommand();
         command.CommandText =
         """
-        SELECT JobId, Score, Apply, Reason
+        SELECT JobId, Score, Apply, Reason, Model
         FROM Evaluations
         """;
 
@@ -175,7 +185,8 @@ public class EvaluationRepository
                 {
                     Score = reader.GetInt32(1),
                     Apply = reader.GetInt32(2) == 1,
-                    Reason = reader.IsDBNull(3) ? "" : reader.GetString(3)
+                    Reason = reader.IsDBNull(3) ? "" : reader.GetString(3),
+                    Model = reader.IsDBNull(4) ? null : reader.GetString(4)
                 });
         }
 

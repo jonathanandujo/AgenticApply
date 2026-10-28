@@ -24,14 +24,21 @@ public class OllamaService
         _candidateProfileService = candidateProfileService;
     }
 
-    public async Task<JobEvaluation?> EvaluateJobAsync(Job job)
+    public async Task<JobEvaluation?> EvaluateJobAsync(
+        Job job,
+        string? model = null,
+        CancellationToken cancellationToken = default)
     {
+        var modelToUse = string.IsNullOrWhiteSpace(model)
+            ? _settings.Model
+            : model.Trim();
+
         var jsonExample =
 """
 {
-    "score": 90,
+    "score": 100,
     "apply": true,
-    "reason": "Remote .NET position with strong match"
+    "reason": "Reason for the score and apply decision."
 }
 """;
         var description =
@@ -80,22 +87,24 @@ Rules:
 
         var request = new
         {
-            model = _settings.Model,
+            model = modelToUse,
             stream = false,
             format = "json",
             prompt
         };
 
-        Console.WriteLine($"Model: {_settings.Model}");
+        Console.WriteLine($"Model: {modelToUse}");
 
         var response = await _httpClient.PostAsJsonAsync(
             $"{_settings.BaseUrl}/api/generate",
-            request);
+            request,
+            cancellationToken);
 
         response.EnsureSuccessStatusCode();
 
         var ollamaResponse =
-            await response.Content.ReadFromJsonAsync<OllamaResponse>();
+            await response.Content.ReadFromJsonAsync<OllamaResponse>(
+                cancellationToken);
 
         if (ollamaResponse is null)
         {
@@ -103,10 +112,12 @@ Rules:
         }
 
         OllamaLogger.Log(
-    job,
-    candidateProfile,
-    prompt,
-    ollamaResponse.Response);
+            job,
+            candidateProfile,
+            prompt,
+            ollamaResponse.Response,
+            modelToUse,
+            _settings.LogPath);
 
         Console.WriteLine("===== OLLAMA RESPONSE =====");
         Console.WriteLine(ollamaResponse.Response);
@@ -119,6 +130,7 @@ Rules:
 
             return new JobEvaluation
             {
+                Model = modelToUse,
                 Score =
                     root?["score"]?.GetValue<int>() ?? 0,
 
@@ -126,7 +138,7 @@ Rules:
                     root?["apply"]?.GetValue<bool>() ?? false,
 
                 Reason =
-                    root?["reason"]?.ToJsonString() ?? ""
+                    root?["reason"]?.GetValue<string>() ?? ""
             };
         }
         catch (Exception ex)

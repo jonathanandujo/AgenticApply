@@ -1,7 +1,9 @@
 using AgenticApply.Agent.Data;
+using AgenticApply.Agent.Services;
 using AgenticApply.Api.Endpoints;
 using AgenticApply.Api.Services;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,9 +48,39 @@ builder.Services.AddSingleton(
     new JobRepository(sqliteConnectionString.ConnectionString));
 builder.Services.AddSingleton(
     new EvaluationRepository(sqliteConnectionString.ConnectionString));
+builder.Services.AddSingleton(
+    new DatabaseInitializer(sqliteConnectionString.ConnectionString));
 builder.Services.AddScoped<IJobQueryService, JobQueryService>();
+builder.Services.AddScoped<IJobReevaluationService, JobReevaluationService>();
+builder.Services.Configure<OllamaSettings>(
+    builder.Configuration.GetSection("Ollama"));
+builder.Services.PostConfigure<OllamaSettings>(settings =>
+{
+    if (!string.IsNullOrWhiteSpace(settings.LogPath)
+        && !Path.IsPathRooted(settings.LogPath))
+    {
+        settings.LogPath = Path.GetFullPath(
+            Path.Combine(builder.Environment.ContentRootPath, settings.LogPath));
+    }
+});
+builder.Services.AddSingleton<CandidateProfileService>();
+builder.Services.AddHttpClient<OllamaService>((serviceProvider, httpClient) =>
+{
+    var settings = serviceProvider
+        .GetRequiredService<IOptions<OllamaSettings>>()
+        .Value;
+
+    if (settings.TimeoutMinutes > 0)
+    {
+        httpClient.Timeout = TimeSpan.FromMinutes(settings.TimeoutMinutes);
+    }
+});
 
 var app = builder.Build();
+
+await app.Services
+    .GetRequiredService<DatabaseInitializer>()
+    .InitializeAsync();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();

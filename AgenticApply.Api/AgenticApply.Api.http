@@ -16,6 +16,20 @@ Accept: application/json
 GET {{AgenticApply.Api_HostAddress}}/jobs/does-not-exist
 Accept: application/json
 
+### Re-evaluate a job using the configured Ollama model
+POST {{AgenticApply.Api_HostAddress}}/jobs/4481802072/reevaluate
+Content-Type: application/json
+
+{}
+
+### Re-evaluate a job with a model override
+POST {{AgenticApply.Api_HostAddress}}/jobs/4481802072/reevaluate
+Content-Type: application/json
+
+{
+  "model": "llama3.1:8b"
+}
+
 ### Get aggregate statistics
 GET {{AgenticApply.Api_HostAddress}}/stats
 Accept: application/json

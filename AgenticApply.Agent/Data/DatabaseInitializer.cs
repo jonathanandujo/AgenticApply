@@ -4,12 +4,32 @@ namespace AgenticApply.Agent.Data;
 
 public class DatabaseInitializer
 {
-    private readonly string _connectionString =
-        "Data Source=Data/AgenticApply.db";
+    private readonly string _connectionString;
+
+    public DatabaseInitializer()
+        : this("Data Source=Data/AgenticApply.db")
+    {
+    }
+
+    public DatabaseInitializer(string connectionString)
+    {
+        _connectionString = connectionString;
+    }
 
     public async Task InitializeAsync()
     {
-        Directory.CreateDirectory("Data");
+        var dataSource =
+            new SqliteConnectionStringBuilder(_connectionString).DataSource;
+        if (dataSource != ":memory:"
+            && !dataSource.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+        {
+            var databaseDirectory = Path.GetDirectoryName(
+                Path.GetFullPath(dataSource));
+            if (!string.IsNullOrEmpty(databaseDirectory))
+            {
+                Directory.CreateDirectory(databaseDirectory);
+            }
+        }
 
         await using var connection =
             new SqliteConnection(_connectionString);
@@ -38,6 +58,7 @@ public class DatabaseInitializer
             Score INTEGER NOT NULL,
             Apply INTEGER NOT NULL,
             Reason TEXT,
+            Model TEXT,
             CreatedAt TEXT NOT NULL
         );
 
@@ -51,5 +72,22 @@ public class DatabaseInitializer
         """;
 
         await command.ExecuteNonQueryAsync();
+
+        command.CommandText =
+        """
+        SELECT COUNT(*)
+        FROM pragma_table_info('Evaluations')
+        WHERE name = 'Model'
+        """;
+
+        var hasModelColumn =
+            Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
+
+        if (!hasModelColumn)
+        {
+            command.CommandText =
+                "ALTER TABLE Evaluations ADD COLUMN Model TEXT;";
+            await command.ExecuteNonQueryAsync();
+        }
     }
 }

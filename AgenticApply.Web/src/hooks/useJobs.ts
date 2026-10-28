@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import { getJob, getJobs, getStats, getTopJobs } from '../api/jobs'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getJob, getJobs, getStats, getTopJobs, reevaluateJob } from '../api/jobs'
 
 export function useJobs() {
   return useQuery({
@@ -27,5 +27,19 @@ export function useStats() {
   return useQuery({
     queryKey: ['stats'],
     queryFn: ({ signal }) => getStats(signal),
+  })
+}
+
+export function useReevaluateJob(jobId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (model?: string) => reevaluateJob(jobId, model),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+        queryClient.invalidateQueries({ queryKey: ['stats'] }),
+      ])
+    },
   })
 }
