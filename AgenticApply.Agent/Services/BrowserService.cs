@@ -546,7 +546,9 @@ public class BrowserService
                 return (null, null);
             }
 
-            var buttons = await dialog.Locator("button").AllAsync();
+            var buttons = await dialog
+                .Locator("button, [role='button'], input[type='submit'], input[type='button']")
+                .AllAsync();
             ILocator? submitButton = null;
             ILocator? continueButton = null;
             foreach (var button in buttons)
@@ -590,16 +592,21 @@ public class BrowserService
     private static async Task<string> GetButtonLabelAsync(ILocator button)
     {
         var ariaLabel = await button.GetAttributeAsync("aria-label");
+        var title = await button.GetAttributeAsync("title");
+        var value = await button.GetAttributeAsync("value");
         var text = await button.InnerTextAsync();
-        return string.Join(
-            " ",
-            new[] { ariaLabel, text }
-                .Where(label => !string.IsNullOrWhiteSpace(label)));
+        return Regex.Replace(
+            string.Join(
+                " ",
+                new[] { ariaLabel, title, value, text }
+                    .Where(part => !string.IsNullOrWhiteSpace(part))),
+            @"\s+",
+            " ").Trim();
     }
 
     private static async Task<bool> HasInvalidRequiredFieldsAsync(ILocator dialog) =>
         await dialog.Locator(
-                "input:invalid, select:invalid, textarea:invalid, [aria-invalid='true']")
+                "input:invalid:visible, select:invalid:visible, textarea:invalid:visible, [aria-invalid='true']:visible")
             .CountAsync() > 0;
 
     private static async Task<bool> WaitForSubmissionConfirmationAsync(

@@ -20,6 +20,8 @@ const navigation = [
   { label: 'Settings', to: '/settings', icon: Settings2 },
 ]
 
+const FRONTEND_VERSION = '1'
+
 function formatScanTime(value?: string | null) {
   if (!value) return 'Not reported'
   const date = new Date(value)
@@ -169,7 +171,10 @@ export function AppLayout() {
         </div>
         <footer className="app-footer">
           <span>AgenticApply <span className="footer-version">MVP</span></span>
-          <span>Built for your next move <span className="footer-spark">✳</span></span>
+          <span>
+            Built for your next move <span className="footer-spark">✳</span>
+            <span className="footer-version">UI v{FRONTEND_VERSION}</span>
+          </span>
         </footer>
       </main>
     </div>

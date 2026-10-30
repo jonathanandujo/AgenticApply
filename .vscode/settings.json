@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^Set-Location \\.\\\\AgenticApply\\.Api\\\\ClientApp; npm run build; if \\(\\$LASTEXITCODE -ne 0\\) \\{ exit \\$LASTEXITCODE \\}; npm run lint$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

@@ -14,6 +14,7 @@ export default defineConfig({
       '/jobs': 'http://localhost:5000',
       '/stats': 'http://localhost:5000',
       '/settings': 'http://localhost:5000',
+      '/agent': 'http://localhost:5000',
     },
   },
 })

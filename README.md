@@ -119,23 +119,42 @@ automatically at startup. Ollama evaluation logs are written to
 
 ## Build and run
 
-From the repository root, build the React dashboard once (and whenever you
-change frontend code):
+Install frontend dependencies from the repository root:
 
 ```powershell
 cd .\AgenticApply.Api\ClientApp
 npm ci
-npm run build
-cd ..\..
 ```
 
-Then start the API and background worker:
+For the API-hosted dashboard, build the frontend and start the API:
+
+```powershell
+npm run build
+cd ..\..
+dotnet run --project .\AgenticApply.Api\AgenticApply.Api.csproj
+```
+
+For frontend development without rebuilding after each TSX/CSS change, start
+the API in one terminal:
 
 ```powershell
 dotnet run --project .\AgenticApply.Api\AgenticApply.Api.csproj
 ```
 
-Open the dashboard at:
+Then start Vite in another terminal:
+
+```powershell
+cd .\AgenticApply.Api\ClientApp
+npm run dev
+```
+
+Open the Vite dashboard at `http://localhost:5173`. Vite applies frontend
+changes automatically. The `UI v1` footer label is manually maintained; update
+`FRONTEND_VERSION` in `AppLayout.tsx` when you want to mark a change. The
+API-hosted dashboard uses static built assets and requires `npm run build`
+after frontend changes.
+
+The API-hosted dashboard is available at:
 
 - `http://localhost:5000`
 - `https://localhost:5001`
