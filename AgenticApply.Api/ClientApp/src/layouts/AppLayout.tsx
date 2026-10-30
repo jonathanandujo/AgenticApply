@@ -20,7 +20,7 @@ const navigation = [
   { label: 'Settings', to: '/settings', icon: Settings2 },
 ]
 
-const FRONTEND_VERSION = '1'
+const FRONTEND_VERSION = '1.0.1'
 
 function formatScanTime(value?: string | null) {
   if (!value) return 'Not reported'

@@ -347,17 +347,10 @@ public class BrowserService
             Timeout = (float)ApplicationDialogWait.TotalMilliseconds
         });
 
-        var dialog = page.Locator("[role='dialog']").Last;
-        try
-        {
-            await dialog.WaitForAsync(
-                new LocatorWaitForOptions
-                {
-                    State = WaitForSelectorState.Visible,
-                    Timeout = (float)ApplicationDialogWait.TotalMilliseconds
-                });
-        }
-        catch (TimeoutException)
+        var dialog = await WaitForApplicationDialogAsync(
+            page,
+            cancellationToken);
+        if (dialog is null)
         {
             _logger.LogWarning(
                 "Easy Apply was clicked for job {JobId}, but LinkedIn did not open the application dialog",
@@ -365,6 +358,13 @@ public class BrowserService
             return new(
                 EasyApplyAttemptStatus.NeedsManualInput,
                 "LinkedIn did not open the Easy Apply form. Complete the application manually.");
+        }
+
+        if (await dialog.EvaluateAsync<bool>("element => element.tagName === 'BODY'"))
+        {
+            _logger.LogInformation(
+                "LinkedIn rendered Easy Apply without a recognized dialog wrapper for job {JobId}; searching visible page controls",
+                jobId);
         }
 
         _logger.LogInformation(
@@ -428,15 +428,20 @@ public class BrowserService
             }
 
             var previousText = dialogText;
-            var continueLabel = await GetButtonLabelAsync(continueButton);
+            var previousContinueLabel = await GetButtonLabelAsync(continueButton);
             _logger.LogInformation(
                 "Clicking LinkedIn Easy Apply step {Step} ({ButtonLabel})",
                 step + 1,
-                continueLabel);
-            await continueButton.ClickAsync();
+                previousContinueLabel);
+            await continueButton.ScrollIntoViewIfNeededAsync();
+            await continueButton.ClickAsync(new LocatorClickOptions
+            {
+                Timeout = (float)ApplicationStepWait.TotalMilliseconds
+            });
             if (!await WaitForApplicationStepChangeAsync(
                     dialog,
                     previousText,
+                    previousContinueLabel,
                     cancellationToken))
             {
                 return new(
@@ -503,9 +508,70 @@ public class BrowserService
         return null;
     }
 
+    private static async Task<ILocator?> WaitForApplicationDialogAsync(
+        IPage page,
+        CancellationToken cancellationToken)
+    {
+        var deadline = DateTimeOffset.UtcNow + ApplicationDialogWait;
+        var dialogSelectors = new[]
+        {
+            "[role='dialog']",
+            "[aria-modal='true']",
+            ".artdeco-modal",
+            ".jobs-easy-apply-modal",
+            "[class*='easy-apply-modal']"
+        };
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ILocator? visibleDialog = null;
+
+            foreach (var selector in dialogSelectors)
+            {
+                var candidates = page.Locator(selector);
+                var count = await candidates.CountAsync();
+                for (var index = count - 1; index >= 0; index--)
+                {
+                    var candidate = candidates.Nth(index);
+                    if (!await candidate.IsVisibleAsync())
+                    {
+                        continue;
+                    }
+
+                    visibleDialog ??= candidate;
+                    var (submitButton, continueButton) =
+                        await FindApplicationStepButtonsAsync(candidate);
+                    if (submitButton is not null || continueButton is not null)
+                    {
+                        return candidate;
+                    }
+                }
+            }
+
+            var pageBody = page.Locator("body");
+            var (bodySubmitButton, bodyContinueButton) =
+                await FindApplicationStepButtonsAsync(pageBody);
+            if (bodySubmitButton is not null || bodyContinueButton is not null)
+            {
+                return pageBody;
+            }
+
+            if (visibleDialog is not null)
+            {
+                return pageBody;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken);
+        }
+
+        return null;
+    }
+
     private static async Task<bool> WaitForApplicationStepChangeAsync(
         ILocator dialog,
         string previousText,
+        string previousContinueLabel,
         CancellationToken cancellationToken)
     {
         var deadline = DateTimeOffset.UtcNow + ApplicationStepWait;
@@ -522,6 +588,17 @@ public class BrowserService
                     previousText,
                     currentText,
                     StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            var (_, continueButton) =
+                await FindApplicationStepButtonsAsync(dialog);
+            if (continueButton is not null
+                && !string.Equals(
+                    previousContinueLabel,
+                    await GetButtonLabelAsync(continueButton),
+                    StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
@@ -546,37 +623,8 @@ public class BrowserService
                 return (null, null);
             }
 
-            var buttons = await dialog
-                .Locator("button, [role='button'], input[type='submit'], input[type='button']")
-                .AllAsync();
-            ILocator? submitButton = null;
-            ILocator? continueButton = null;
-            foreach (var button in buttons)
-            {
-                if (!await button.IsVisibleAsync()
-                    || !await button.IsEnabledAsync())
-                {
-                    continue;
-                }
-
-                var label = await GetButtonLabelAsync(button);
-                if (Regex.IsMatch(
-                        label,
-                        @"^submit(?:\s+application)?(?:\b|$)",
-                        RegexOptions.IgnoreCase))
-                {
-                    submitButton = button;
-                    break;
-                }
-
-                if (Regex.IsMatch(
-                        label,
-                        @"^(next|continue|review)(?:\b|$)",
-                        RegexOptions.IgnoreCase))
-                {
-                    continueButton ??= button;
-                }
-            }
+            var (submitButton, continueButton) =
+                await FindApplicationStepButtonsAsync(dialog);
 
             if (submitButton is not null || continueButton is not null)
             {
@@ -587,6 +635,44 @@ public class BrowserService
         }
 
         return (null, null);
+    }
+
+    private static async Task<(ILocator? SubmitButton, ILocator? ContinueButton)>
+        FindApplicationStepButtonsAsync(ILocator dialog)
+    {
+        var buttons = await dialog
+            .Locator("button, [role='button'], input[type='submit'], input[type='button']")
+            .AllAsync();
+        ILocator? submitButton = null;
+        ILocator? continueButton = null;
+        foreach (var button in buttons)
+        {
+            if (!await button.IsVisibleAsync()
+                || !await button.IsEnabledAsync())
+            {
+                continue;
+            }
+
+            var label = await GetButtonLabelAsync(button);
+            if (Regex.IsMatch(
+                    label,
+                    @"\bsubmit(?:\s+application)?\b",
+                    RegexOptions.IgnoreCase))
+            {
+                submitButton = button;
+                break;
+            }
+
+            if (Regex.IsMatch(
+                    label,
+                    @"\b(next|continue|review)\b",
+                    RegexOptions.IgnoreCase))
+            {
+                continueButton ??= button;
+            }
+        }
+
+        return (submitButton, continueButton);
     }
 
     private static async Task<string> GetButtonLabelAsync(ILocator button)
