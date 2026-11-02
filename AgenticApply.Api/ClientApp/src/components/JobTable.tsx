@@ -16,7 +16,6 @@ import {
 import type { Job } from '../types/api'
 import { EmptyState } from './QueryState'
 import { ScoreBadge } from './ScoreBadge'
-import { StatusBadge } from './StatusBadge'
 
 type SortDirection = 'asc' | 'desc'
 
@@ -72,11 +71,14 @@ export function JobTable({ jobs, showAll = false }: JobTableProps) {
                 {sortDirection === 'desc' ? <ArrowDown size={14} /> : <ArrowUp size={14} />}
               </button>
             </th>
-            <th scope="col">Recommendation</th>
             <th scope="col">Company</th>
             <th scope="col">Title</th>
             <th scope="col">Location</th>
-            {showAll && <th scope="col">Apply option</th>}
+            {showAll && (
+              <th className="apply-option-cell" scope="col">
+                Apply option
+              </th>
+            )}
             <th scope="col" aria-label="Open job" />
           </tr>
         </thead>
@@ -104,13 +106,6 @@ function JobTableRow({ job, showAll }: { job: Job; showAll: boolean }) {
           <span className="score-pending">Pending</span>
         )}
       </td>
-      <td>
-        {job.evaluation ? (
-          <StatusBadge apply={job.evaluation.apply} />
-        ) : (
-          <span className="table-muted">—</span>
-        )}
-      </td>
       <td className="company-cell">{job.company}</td>
       <td>
         <Link
@@ -122,7 +117,7 @@ function JobTableRow({ job, showAll }: { job: Job; showAll: boolean }) {
       </td>
       <td className="location-cell">{job.location}</td>
       {showAll && (
-        <td>
+        <td className="apply-option-cell">
           <span className="table-muted">
             {job.applyAvailable === null
               ? 'Unknown'
@@ -134,7 +129,7 @@ function JobTableRow({ job, showAll }: { job: Job; showAll: boolean }) {
           </span>
         </td>
       )}
-      <td>
+      <td className="actions-cell">
         <div className="row-actions">
           <button
             className="row-action"

@@ -11,7 +11,6 @@ import { Link, useParams } from 'react-router-dom'
 import { Panel } from '../components/Panel'
 import { ErrorState, LoadingState } from '../components/QueryState'
 import { ScoreBadge } from '../components/ScoreBadge'
-import { StatusBadge } from '../components/StatusBadge'
 import {
   useJob,
   useMarkJobApplied,
@@ -185,10 +184,10 @@ export function JobDetailsPage() {
                   </div>
                   <ScoreBadge score={job.evaluation.score} />
                 </div>
-                <div className="evaluation-status">
+                {/* <div className="evaluation-status">
                   <span className="detail-score-label">RECOMMENDATION</span>
                   <StatusBadge apply={job.evaluation.apply} />
-                </div>
+                </div> */}
                 <div className="evaluation-model">
                   <span className="detail-score-label">MODEL</span>
                   <code>{job.evaluation.model ?? 'Not recorded'}</code>

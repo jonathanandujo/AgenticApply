@@ -6,10 +6,27 @@ import { Panel } from '../components/Panel'
 import { ErrorState, LoadingState } from '../components/QueryState'
 import { useJobs } from '../hooks/useJobs'
 
+type JobFilter =
+  | 'all'
+  | 'recommended'
+  | 'pending'
+  | 'applied'
+  | 'notapplied'
+
+function isJobFilter(value: string): value is JobFilter {
+  return [
+    'all',
+    'recommended',
+    'pending',
+    'applied',
+    'notapplied',
+  ].includes(value)
+}
+
 export function JobsPage() {
   const query = useJobs()
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState('all')
+  const [filter, setFilter] = useState<JobFilter>('all')
 
   const jobs = useMemo(() => {
     const allJobs = query.data ?? []
@@ -23,7 +40,9 @@ export function JobsPage() {
       const matchesFilter =
         filter === 'all' ||
         (filter === 'recommended' && Boolean(job.evaluation?.apply)) ||
-        (filter === 'pending' && !job.evaluation)
+        (filter === 'pending' && !job.evaluation) ||
+        (filter === 'applied' && job.applied) ||
+        (filter === 'notapplied' && !job.applied)
 
       return matchesSearch && matchesFilter
     })
@@ -61,12 +80,18 @@ export function JobsPage() {
               <SlidersHorizontal size={15} />
               <select
                 value={filter}
-                onChange={(event) => setFilter(event.target.value)}
+                onChange={(event) => {
+                  if (isJobFilter(event.target.value)) {
+                    setFilter(event.target.value)
+                  }
+                }}
                 aria-label="Filter jobs"
               >
                 <option value="all">All jobs</option>
                 <option value="recommended">Recommended</option>
                 <option value="pending">Awaiting evaluation</option>
+                <option value="applied">Applied</option>
+                <option value="notapplied">Not Applied</option>
               </select>
             </label>
           </div>
