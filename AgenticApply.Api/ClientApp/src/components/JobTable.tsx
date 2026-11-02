@@ -122,10 +122,10 @@ function JobTableRow({ job, showAll }: { job: Job; showAll: boolean }) {
             {job.applyAvailable === null
               ? 'Unknown'
               : job.easyApply
-              ? 'Easy Apply'
-              : job.applyAvailable
-                ? 'External Apply'
-                : 'No'}
+                ? 'Easy Apply'
+                : job.applyAvailable
+                  ? 'External Apply'
+                  : 'No'}
           </span>
         </td>
       )}
@@ -181,10 +181,11 @@ function JobTableRow({ job, showAll }: { job: Job; showAll: boolean }) {
                     || applyMutation.isPending
                   }
                   onClick={() => {
-                    const confirmed = window.confirm(
-                      `Submit an Easy Apply application for ${job.title} at ${job.company}? AgenticApply will use your signed-in LinkedIn session, proceed through the form, and submit it. It will stop if required answers are missing.`,
-                    )
-                    if (confirmed) autoApplyMutation.mutate()
+                    // const confirmed = window.confirm(
+                    //   `Submit an Easy Apply application for ${job.title} at ${job.company}? AgenticApply will use your signed-in LinkedIn session, proceed through the form, and submit it. It will stop if required answers are missing.`,
+                    // )
+                    // if (confirmed) 
+                    autoApplyMutation.mutate()
                   }}
                 >
                   <Send

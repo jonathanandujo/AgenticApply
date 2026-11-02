@@ -119,42 +119,28 @@ automatically at startup. Ollama evaluation logs are written to
 
 ## Build and run
 
-Install frontend dependencies from the repository root:
+Install frontend dependencies once:
 
 ```powershell
 cd .\AgenticApply.Api\ClientApp
 npm ci
-```
-
-For the API-hosted dashboard, build the frontend and start the API:
-
-```powershell
-npm run build
 cd ..\..
-dotnet run --project .\AgenticApply.Api\AgenticApply.Api.csproj
 ```
 
-For frontend development without rebuilding after each TSX/CSS change, start
-the API in one terminal:
+Run the API from the repository root:
 
 ```powershell
 dotnet run --project .\AgenticApply.Api\AgenticApply.Api.csproj
 ```
 
-Then start Vite in another terminal:
+In Development, this single command starts both the API and Vite. Open
+`http://localhost:5000`; the SPA proxy redirects the browser to Vite, where
+TSX/CSS edits hot-reload automatically. The Vite server proxies API requests
+back to port 5000. `npm run build` is only needed when preparing static
+frontend assets for publishing. Refreshing frontend routes such as `/jobs`
+serves the React app; JSON requests to `/jobs` continue to reach the API.
 
-```powershell
-cd .\AgenticApply.Api\ClientApp
-npm run dev
-```
-
-Open the Vite dashboard at `http://localhost:5173`. Vite applies frontend
-changes automatically. The `UI v1` footer label is manually maintained; update
-`FRONTEND_VERSION` in `AppLayout.tsx` when you want to mark a change. The
-API-hosted dashboard uses static built assets and requires `npm run build`
-after frontend changes.
-
-The API-hosted dashboard is available at:
+The API is available at:
 
 - `http://localhost:5000`
 - `https://localhost:5001`
@@ -171,15 +157,9 @@ prompted and leave the browser profile available for subsequent scans. The
 worker waits for manual authentication when LinkedIn redirects to a login or
 checkpoint page.
 
-The dashboard is served from `AgenticApply.Api\wwwroot`. For a frontend-only
-development session, run Vite separately from `AgenticApply.Api\ClientApp`:
-
-```powershell
-npm run dev
-```
-
-The single-process production-style workflow uses the built `wwwroot` assets
-and only requires the `dotnet run` command above.
+Outside Development, the dashboard is served from
+`AgenticApply.Api\wwwroot`; rebuild the frontend with `npm run build` after
+frontend changes before running the production-style API.
 
 ## Usage
 

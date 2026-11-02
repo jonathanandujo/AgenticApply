@@ -1,22 +1,24 @@
 # AgenticApply Dashboard
 
-The React/Vite dashboard lives in `AgenticApply.Api/ClientApp`. Build it into
-the API's `wwwroot` directory with:
-
 ```powershell
 cd AgenticApply.Api\ClientApp
 npm install
-npm run build
 ```
 
-Then start the API and hosted agent worker together:
+In Development, start the API from the repository root:
 
 ```powershell
 dotnet run --project AgenticApply.Api
 ```
 
-Open `http://localhost:5000` or `https://localhost:5001`. The API serves the
-dashboard and its API endpoints from the same process and origin.
+The API automatically starts Vite. Open `http://localhost:5000`; the browser
+is redirected to the Vite dashboard, and TSX/CSS changes hot-reload without a
+separate terminal or rebuild. Vite proxies API requests to `http://localhost:5000`.
+Refreshing routes such as `/jobs` loads the React app, while JSON requests to
+`/jobs` continue to reach the API.
+
+Run `npm run build` in `ClientApp` when preparing static assets for publishing.
+Outside Development, ASP.NET Core serves the built dashboard from `wwwroot`.
 
 The API's `Agent:Enabled` setting controls the hosted worker, and
 `Agent:ScanIntervalMinutes` sets the delay between scans. The default
@@ -26,17 +28,6 @@ at `AgenticApply.Agent/Data/AgenticApply.db`; configure
 Set `Agent:MaxNewJobsPerScan` from 2 to 5 to limit new records per scan
 (default: 3). Use **Scan now** on the dashboard or `POST /agent/scan` to queue a
 scan immediately instead of waiting for the interval.
-
-For frontend-only development, run the API with the `Agent:Enabled` setting
-disabled if you do not want the agent to scan while working on the UI, then run:
-
-```powershell
-cd AgenticApply.Api\ClientApp
-npm run dev
-```
-
-Vite proxies API requests to `http://localhost:5000`. The development server is
-optional; the built dashboard is served directly by ASP.NET Core.
 
 The first hosted-worker run uses the LinkedIn browser profile in
 `AgenticApply.Api/BrowserData`. During migration, the existing worker profile
